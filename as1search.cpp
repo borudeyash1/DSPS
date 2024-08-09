@@ -56,7 +56,7 @@ void Lsearch::search()
 }
 
 void Lsearch::FALsearch() // using linear search
-{
+{  
     int item, first = -1;
     int last = -1;
 
@@ -68,8 +68,10 @@ void Lsearch::FALsearch() // using linear search
         if (arr[i] == item)
         {
             if (first == -1)
+            {
                 first = i;
-            last = i;
+                last = i;
+        }
         }
     }
     cout << "First Occurrence = " << first << endl;

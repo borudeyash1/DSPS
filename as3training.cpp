@@ -168,14 +168,15 @@ void analyzeFeedback()
 
     for (int i = 0; i < S.size(); i++)
     {
-        vector<string> feedback = S[i].getFeedback();
-        for (int j = 0; j < feedback.size(); j++)
-        {
-            if (feedback[j] == "1" || feedback[j] == "1" || feedback[j] == "1")
-                yesCount[j]++;
-            else if (feedback[j] == "0" || feedback[j] == "0" || feedback[j] == "0")
-                noCount[j]++;
-        }
+    vector<string> feedback = S[i].getFeedback();
+    for (int j = 0; j < feedback.size(); j++)
+    {
+        if (feedback[j] == "1")
+            yesCount[j]++;
+        else if (feedback[j] == "0")
+            noCount[j]++;
+    }
+
     }
 
     cout << "Feedback Analysis:\n";

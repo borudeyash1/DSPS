@@ -1,6 +1,4 @@
-Here’s the corrected code with the `cmp` function fixed and the `palindrome` function added:
 
-```cpp
 #include <iostream>
 using namespace std;
 
@@ -244,10 +242,3 @@ int main() {
 
     return 0;
 }
-```
-
-### Summary of Changes:
-- **`cmp` function**: Now correctly compares two strings and returns `true` if they are equal, otherwise `false`.
-- **`palindrome` function**: Added to check if the first string is a palindrome.
-
-This code should work as intended, and now includes the requested palindrome check feature.

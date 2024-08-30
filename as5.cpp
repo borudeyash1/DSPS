@@ -7,9 +7,9 @@ private:
     int length;
 
 public:
-    // Function to set the string
-    void setString(const char* input) {
-        if (input == nullptr) {
+    // set string
+    void setString( char* input) {
+        if (input == nullptr) {                //this null ptr points to nthing,when we don't input anything,then it's needed there
             s = nullptr;
             length = 0;
         } else {
@@ -23,15 +23,15 @@ public:
         }
     }
 
-    // Function to get the length of the string
-    int getLen() const {
+    // length 
+    int getLen()  {
         return length;
     }
 
-    // Function to concatenate two strings
+    // concatenate 
     Str concat(const Str& str2) {
         if (s == nullptr || str2.s == nullptr) {
-            cout << "One of the strings is null, cannot concatenate.\n";
+            cout << "One string is null, cannot concatenate.\n";
             return Str();
         }
 
@@ -54,7 +54,7 @@ public:
         return result;
     }
 
-    // Function to reverse the string
+    //reverse string
     Str rev() const {
         if (s == nullptr) {
             cout << "String is null, cannot reverse.\n";
@@ -73,7 +73,7 @@ public:
         return result;
     }
 
-    // Function to convert to uppercase
+    // uppercase
     void toUpper() {
         if (s == nullptr) {
             cout << "String is null, cannot convert to uppercase.\n";
@@ -87,7 +87,7 @@ public:
         }
     }
 
-    // Function to convert to lowercase
+    //lowercase
     void toLower() {
         if (s == nullptr) {
             cout << "String is null, cannot convert to lowercase.\n";
@@ -101,22 +101,36 @@ public:
         }
     }
 
-    // Function to compare two strings
-    bool cmp(const Str& str2) const {
-        if (s == nullptr || str2.s == nullptr) {
-            cout << "One of the strings is null, cannot compare.\n";
-            return false;
-        }
 
-        if (length != str2.length) return false;
+    // bool cmp(const Str& str2) const {
+    //     if (s == nullptr || str2.s == nullptr) {
+    //         cout << "One string is null, cannot compare.\n";
+    //         return false;
+    //     }
+
+    //     if (length != str2.length) return false;
         
-        for (int i = 0; i < length; i++) {
-            if (s[i] != str2.s[i]) return false;
-        }
-        return true;
+    //     for (int i = 0; i < length; i++) {
+    //         if (s[i] != str2.s[i]) return false;
+    //     }
+    //     return true;
+    // }
+    void cmp(str, str2)
+{
+ 
+    if (str1[i] != str2[i]) 
+    {
+        cout << str1[i] << " is not equal to " << str2[i] << endl;
+        if (str1[i] > str2[i])
+            cout << str1[i] << " is greater than " << str2[i] << endl;
+        else
+            cout << str2 << " is greater than " << str1 << endl;
     }
+    else
+        cout << str1 << " is equal to " << str2[i] << endl;
+}
 
-    // Function to find a substring
+    // substring
     int findSubstr(const Str& substr) const {
         if (s == nullptr || substr.s == nullptr) {
             cout << "One of the strings is null, cannot find substring.\n";
@@ -133,7 +147,7 @@ public:
         return -1;
     }
 
-    // Function to print the string
+    // display
     void print() const {
         if (s == nullptr) {
             cout << "String is null.\n";
@@ -142,12 +156,7 @@ public:
         }
     }
 
-    // Function to free allocated memory (if any)
-    void clear() {
-        delete[] s;
-        s = nullptr;
-        length = 0;
-    }
+
 };
 
 int main() {
@@ -162,7 +171,7 @@ int main() {
     str2.setString(input2);
 
     int choice;
-    do {
+    while (choice != 8){
         cout << "\nChoose an operation:\n";
         cout << "1. Concatenate Strings\n";
         cout << "2. Get Length of String 1\n";
@@ -180,7 +189,7 @@ int main() {
                 Str concatenated = str1.concat(str2);
                 cout << "Concatenated String: ";
                 concatenated.print();
-                concatenated.clear(); // Clear memory after use
+                
                 break;
             }
             case 2: {
@@ -191,7 +200,7 @@ int main() {
                 Str reversed = str1.rev();
                 cout << "Reversed String 1: ";
                 reversed.print();
-                reversed.clear(); // Clear memory after use
+                
                 break;
             }
             case 4: {
@@ -207,7 +216,7 @@ int main() {
                 break;
             }
             case 6: {
-                cout << "Are strings equal? " << (str1.cmp(str2) ? "Yes" : "No") << endl;
+                cout << "Are strings equal? " << (cmp(str, str2) ? "Yes" : "No") << endl;
                 break;
             }
             case 7: {
@@ -226,11 +235,8 @@ int main() {
             default:
                 cout << "Invalid choice! Please try again.\n";
         }
-    } while (choice != 8);
+    } ;
 
-    // Clear memory before exiting
-    str1.clear();
-    str2.clear();
 
     return 0;
 }

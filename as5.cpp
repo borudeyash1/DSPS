@@ -1,3 +1,6 @@
+Here’s the corrected code with the `cmp` function fixed and the `palindrome` function added:
+
+```cpp
 #include <iostream>
 using namespace std;
 
@@ -8,8 +11,8 @@ private:
 
 public:
     // set string
-    void setString( char* input) {
-        if (input == nullptr) {                //this null ptr points to nthing,when we don't input anything,then it's needed there
+    void setString(char* input) {
+        if (input == nullptr) {
             s = nullptr;
             length = 0;
         } else {
@@ -24,7 +27,7 @@ public:
     }
 
     // length 
-    int getLen()  {
+    int getLen() {
         return length;
     }
 
@@ -54,7 +57,7 @@ public:
         return result;
     }
 
-    //reverse string
+    // reverse string
     Str rev() const {
         if (s == nullptr) {
             cout << "String is null, cannot reverse.\n";
@@ -87,7 +90,7 @@ public:
         }
     }
 
-    //lowercase
+    // lowercase
     void toLower() {
         if (s == nullptr) {
             cout << "String is null, cannot convert to lowercase.\n";
@@ -101,36 +104,22 @@ public:
         }
     }
 
+    // compare strings
+    bool cmp(const Str& str2) const {
+        if (s == nullptr || str2.s == nullptr) {
+            cout << "One string is null, cannot compare.\n";
+            return false;
+        }
 
-    // bool cmp(const Str& str2) const {
-    //     if (s == nullptr || str2.s == nullptr) {
-    //         cout << "One string is null, cannot compare.\n";
-    //         return false;
-    //     }
-
-    //     if (length != str2.length) return false;
+        if (length != str2.length) return false;
         
-    //     for (int i = 0; i < length; i++) {
-    //         if (s[i] != str2.s[i]) return false;
-    //     }
-    //     return true;
-    // }
-    void cmp(str, str2)
-{
- 
-    if (str1[i] != str2[i]) 
-    {
-        cout << str1[i] << " is not equal to " << str2[i] << endl;
-        if (str1[i] > str2[i])
-            cout << str1[i] << " is greater than " << str2[i] << endl;
-        else
-            cout << str2 << " is greater than " << str1 << endl;
+        for (int i = 0; i < length; i++) {
+            if (s[i] != str2.s[i]) return false;
+        }
+        return true;
     }
-    else
-        cout << str1 << " is equal to " << str2[i] << endl;
-}
 
-    // substring
+    // find substring
     int findSubstr(const Str& substr) const {
         if (s == nullptr || substr.s == nullptr) {
             cout << "One of the strings is null, cannot find substring.\n";
@@ -147,6 +136,19 @@ public:
         return -1;
     }
 
+    // check palindrome
+    bool isPalindrome() const {
+        if (s == nullptr) {
+            cout << "String is null, cannot check palindrome.\n";
+            return false;
+        }
+
+        for (int i = 0; i < length / 2; i++) {
+            if (s[i] != s[length - 1 - i]) return false;
+        }
+        return true;
+    }
+
     // display
     void print() const {
         if (s == nullptr) {
@@ -155,8 +157,6 @@ public:
             cout << s << endl;
         }
     }
-
-
 };
 
 int main() {
@@ -171,7 +171,7 @@ int main() {
     str2.setString(input2);
 
     int choice;
-    while (choice != 8){
+    while (choice != 9) {
         cout << "\nChoose an operation:\n";
         cout << "1. Concatenate Strings\n";
         cout << "2. Get Length of String 1\n";
@@ -180,7 +180,8 @@ int main() {
         cout << "5. Convert String 1 to Lowercase\n";
         cout << "6. Compare Strings\n";
         cout << "7. Find Substring (String 2 in String 1)\n";
-        cout << "8. Exit\n";
+        cout << "8. Check if String 1 is Palindrome\n";
+        cout << "9. Exit\n";
         cout << "Enter your choice: ";
         cin >> choice;
 
@@ -189,7 +190,6 @@ int main() {
                 Str concatenated = str1.concat(str2);
                 cout << "Concatenated String: ";
                 concatenated.print();
-                
                 break;
             }
             case 2: {
@@ -200,7 +200,6 @@ int main() {
                 Str reversed = str1.rev();
                 cout << "Reversed String 1: ";
                 reversed.print();
-                
                 break;
             }
             case 4: {
@@ -216,7 +215,8 @@ int main() {
                 break;
             }
             case 6: {
-                cout << "Are strings equal? " << (cmp(str, str2) ? "Yes" : "No") << endl;
+                bool areEqual = str1.cmp(str2);
+                cout << "Are strings equal? " << (areEqual ? "Yes" : "No") << endl;
                 break;
             }
             case 7: {
@@ -229,14 +229,25 @@ int main() {
                 break;
             }
             case 8: {
+                bool palindrome = str1.isPalindrome();
+                cout << "Is String 1 a palindrome? " << (palindrome ? "Yes" : "No") << endl;
+                break;
+            }
+            case 9: {
                 cout << "Exiting...\n";
                 break;
             }
             default:
                 cout << "Invalid choice! Please try again.\n";
         }
-    } ;
-
+    }
 
     return 0;
 }
+```
+
+### Summary of Changes:
+- **`cmp` function**: Now correctly compares two strings and returns `true` if they are equal, otherwise `false`.
+- **`palindrome` function**: Added to check if the first string is a palindrome.
+
+This code should work as intended, and now includes the requested palindrome check feature.

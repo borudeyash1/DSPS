@@ -127,7 +127,8 @@ public:
         for (int i = 0; i <= length - substr.length; i++) {
             int j;
             for (j = 0; j < substr.length; j++) {
-                if (s[i + j] != substr.s[j]) break;
+                if (s[i + j] != substr.s[j]) 
+                break;
             }
             if (j == substr.length) return i;
         }
@@ -146,6 +147,28 @@ public:
         }
         return true;
     }
+
+    //check occurrence for string 1
+    int occurrence(string str) {
+    int count = 0;
+
+    for (int i = 0; i < str.size(); i++)
+    if (str[i] == '_') 
+    count++;
+
+    return count;
+    }
+    //check occurrence for string 2
+    int occurrence(string str2) {
+    int count = 0;
+
+    for (int i = 0; i < str2.size(); i++)
+    if (str2[i] == '_') 
+    count++;
+
+    return count;
+    }
+
 
     // display
     void print() const {
@@ -169,7 +192,7 @@ int main() {
     str2.setString(input2);
 
     int choice;
-    while (choice != 9) {
+    while (choice != 11) {
         cout << "\nChoose an operation:\n";
         cout << "1. Concatenate Strings\n";
         cout << "2. Get Length of String 1\n";
@@ -179,7 +202,9 @@ int main() {
         cout << "6. Compare Strings\n";
         cout << "7. Find Substring (String 2 in String 1)\n";
         cout << "8. Check if String 1 is Palindrome\n";
-        cout << "9. Exit\n";
+        cout << "9. check occurrence of elemens in string 1\n";
+        cout << "10. check occurrence of elemens in string 1\n";
+        cout << "11. Exit\n";
         cout << "Enter your choice: ";
         cin >> choice;
 
@@ -232,9 +257,21 @@ int main() {
                 break;
             }
             case 9: {
+                int occurrence(string str);
+                cout<<"item occered"<<occurrence(str)<<"times";
+                break;
+            }
+            
+            case 10: {
+                int occurrence(string str2)
+                cout<<"item occered"<<occurrence(str1)<<"times";
+                break;
+            }
+            case 11: {
                 cout << "Exiting...\n";
                 break;
             }
+            
             default:
                 cout << "Invalid choice! Please try again.\n";
         }

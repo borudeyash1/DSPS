@@ -3,32 +3,32 @@ using namespace std;
 
 class Str {
 private:
-    char* s;
-    int length;
+    char* s;  // Pointer to hold the dynamic string
+    int length;  // To store the length of the string
 
 public:
-    // set string
-    void setString(char* input) {
+    // Set string function
+    void setString(const char* input) {
         if (input == nullptr) {
             s = nullptr;
             length = 0;
         } else {
             length = 0;
-            while (input[length] != '\0') length++;
-            s = new char[length + 1];
+            while (input[length] != '\0') length++;  // Calculate length
+            s = new char[length + 1];  // Allocate memory for the string
             for (int i = 0; i < length; i++) {
                 s[i] = input[i];
             }
-            s[length] = '\0';
+            s[length] = '\0';  // Terminate the string
         }
     }
 
-    // length 
+    // Function to get the length of the string
     int getLen() {
         return length;
     }
 
-    // concatenate 
+    // Concatenate two strings
     Str concat(const Str& str2) {
         if (s == nullptr || str2.s == nullptr) {
             cout << "One string is null, cannot concatenate.\n";
@@ -38,23 +38,25 @@ public:
         int len1 = length;
         int len2 = str2.length;
         int newLen = len1 + len2;
-        char* newStr = new char[newLen + 1];
+        char* newStr = new char[newLen + 1];  // Allocate memory for concatenated string
         
+        // Copy first string
         for (int i = 0; i < len1; i++) {
             newStr[i] = s[i];
         }
+        // Copy second string
         for (int i = 0; i < len2; i++) {
             newStr[len1 + i] = str2.s[i];
         }
-        newStr[newLen] = '\0';
+        newStr[newLen] = '\0';  // Terminate the new string
         
         Str result;
         result.setString(newStr);
-        delete[] newStr;
+        delete[] newStr;  // Free memory
         return result;
     }
 
-    // reverse string
+    // Reverse the string
     Str rev() const {
         if (s == nullptr) {
             cout << "String is null, cannot reverse.\n";
@@ -63,17 +65,17 @@ public:
 
         char* revStr = new char[length + 1];
         for (int i = 0; i < length; i++) {
-            revStr[i] = s[length - 1 - i];
+            revStr[i] = s[length - 1 - i];  // Reverse string
         }
         revStr[length] = '\0';
         
         Str result;
         result.setString(revStr);
-        delete[] revStr;
+        delete[] revStr;  // Free memory
         return result;
     }
 
-    // uppercase
+    // Convert string to uppercase
     void toUpper() {
         if (s == nullptr) {
             cout << "String is null, cannot convert to uppercase.\n";
@@ -82,12 +84,12 @@ public:
 
         for (int i = 0; i < length; i++) {
             if (s[i] >= 'a' && s[i] <= 'z') {
-                s[i] = s[i] - ('a' - 'A');
+                s[i] = s[i] - ('a' - 'A');  // Convert lowercase to uppercase
             }
         }
     }
 
-    // lowercase
+    // Convert string to lowercase
     void toLower() {
         if (s == nullptr) {
             cout << "String is null, cannot convert to lowercase.\n";
@@ -96,27 +98,27 @@ public:
 
         for (int i = 0; i < length; i++) {
             if (s[i] >= 'A' && s[i] <= 'Z') {
-                s[i] = s[i] + ('a' - 'A');
+                s[i] = s[i] + ('a' - 'A');  // Convert uppercase to lowercase
             }
         }
     }
 
-    // compare strings
+    // Compare two strings
     bool cmp(const Str& str2) const {
         if (s == nullptr || str2.s == nullptr) {
             cout << "One string is null, cannot compare.\n";
             return false;
         }
 
-        if (length != str2.length) return false;
+        if (length != str2.length) return false;  // If lengths are different, not equal
         
         for (int i = 0; i < length; i++) {
-            if (s[i] != str2.s[i]) return false;
+            if (s[i] != str2.s[i]) return false;  // If any character differs, not equal
         }
         return true;
     }
 
-    // find substring
+    // Find substring in the string
     int findSubstr(const Str& substr) const {
         if (s == nullptr || substr.s == nullptr) {
             cout << "One of the strings is null, cannot find substring.\n";
@@ -127,14 +129,14 @@ public:
             int j;
             for (j = 0; j < substr.length; j++) {
                 if (s[i + j] != substr.s[j]) 
-                break;
+                    break;
             }
-            if (j == substr.length) return i;
+            if (j == substr.length) return i;  // Return position if substring found
         }
         return -1;
     }
 
-    // check palindrome
+    // Check if the string is a palindrome
     bool isPalindrome() const {
         if (s == nullptr) {
             cout << "String is null, cannot check palindrome.\n";
@@ -142,34 +144,22 @@ public:
         }
 
         for (int i = 0; i < length / 2; i++) {
-            if (s[i] != s[length - 1 - i]) return false;
+            if (s[i] != s[length - 1 - i]) return false;  // If mismatch, not a palindrome
         }
         return true;
     }
 
-    //check occurrence for string 1
-    int occurrence(string str) {
-    int count = 0;
-
-    for (int i = 0; i < str.size(); i++)
-    if (str[i] == '_') 
-    count++;
-
-    return count;
-    }
-    //check occurrence for string 2
-    int occurrence(string str2) {
-    int count = 0;
-
-    for (int i = 0; i < str2.size(); i++)
-    if (str2[i] == '_') 
-    count++;
-
-    return count;
+    // Check occurrence of character '_' in the string
+    int occurrence() const {
+        int count = 0;
+        for (int i = 0; i < length; i++) {
+            if (s[i] == '_') 
+                count++;
+        }
+        return count;
     }
 
-
-    // display
+    // Print the string
     void print() const {
         if (s == nullptr) {
             cout << "String is null.\n";
@@ -191,7 +181,7 @@ int main() {
     str2.setString(input2);
 
     int choice;
-    while (choice != 11) {
+    do {
         cout << "\nChoose an operation:\n";
         cout << "1. Concatenate Strings\n";
         cout << "2. Get Length of String 1\n";
@@ -201,9 +191,8 @@ int main() {
         cout << "6. Compare Strings\n";
         cout << "7. Find Substring (String 2 in String 1)\n";
         cout << "8. Check if String 1 is Palindrome\n";
-        cout << "9. check occurrence of elemens in string 1\n";
-        cout << "10. check occurrence of elemens in string 1\n";
-        cout << "11. Exit\n";
+        cout << "9. Check occurrence of '_' in String 1\n";
+        cout << "10. Exit\n";
         cout << "Enter your choice: ";
         cin >> choice;
 
@@ -256,25 +245,17 @@ int main() {
                 break;
             }
             case 9: {
-                int occurrence(string str);
-                cout<<"item occered"<<occurrence(str)<<"times";
+                cout << "Occurrences of '_' in String 1: " << str1.occurrence() << " times\n";
                 break;
             }
-            
             case 10: {
-                int occurrence(string str2)
-                cout<<"item occered"<<occurrence(str1)<<"times";
-                break;
-            }
-            case 11: {
                 cout << "Exiting...\n";
                 break;
             }
-            
             default:
                 cout << "Invalid choice! Please try again.\n";
         }
-    }
+    } while (choice != 10);
 
     return 0;
 }

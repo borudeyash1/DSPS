@@ -148,16 +148,30 @@ public:
         }
         return true;
     }
-
-    // Check occurrence of character '_' in the string
-    int occurrence() const {
-        int count = 0;
-        for (int i = 0; i < length; i++) {
-            if (s[i] == '_') 
-                count++;
-        }
-        return count;
+    
+    //checking occurrence of string 1
+    void occurrence(){
+    	int j;
+    	
+    	
+    	
+    	
+    	for (int i=0;i<length;i++)
+    	{
+    	int count = 1;
+    	for(j=i+1;j<length;j++)
+    	{
+    	if(s[i]==s[j])
+    	{
+    	count++;
+    	
+    	}
+    	}
+    	cout<<s[i]<<"="<<count<<endl;
+    	}
     }
+
+
 
     // Print the string
     void print() const {
@@ -191,7 +205,7 @@ int main() {
         cout << "6. Compare Strings\n";
         cout << "7. Find Substring (String 2 in String 1)\n";
         cout << "8. Check if String 1 is Palindrome\n";
-        cout << "9. Check occurrence of '_' in String 1\n";
+        cout << "9. Check occurrence of ' ' in String 1\n";
         cout << "10. Exit\n";
         cout << "Enter your choice: ";
         cin >> choice;
@@ -245,9 +259,11 @@ int main() {
                 break;
             }
             case 9: {
-                cout << "Occurrences of '_' in String 1: " << str1.occurrence() << " times\n";
+            	str1.occurrence();
+            	
                 break;
             }
+
             case 10: {
                 cout << "Exiting...\n";
                 break;
@@ -255,7 +271,7 @@ int main() {
             default:
                 cout << "Invalid choice! Please try again.\n";
         }
-    } while (choice != 10);
+    } while (choice != 9);
 
     return 0;
 }

@@ -47,7 +47,7 @@ int main()
             else
             {
                 top--;
-                i++;
+                i++;  
                 f = 0;
             }
         }
@@ -58,4 +58,5 @@ int main()
         cout << "\nString is not palindrome";
 
     return 0;
-}
+//nobody to find  out what's gonna happen and the systems are as fast as the fairytale ending and the systematic approach of the society i
+

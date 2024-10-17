@@ -12,7 +12,7 @@ class Pizza {
     float totalPrice;     // total price including discount
 public:
     void acceptOrder();   // To accept the order
-    void serveOrder();    // To take the order and delete it
+    void serveOrder();    // To take the order and delete itṇ
     void display();       // To display all the orders
     void peek();          // To display the current order
     void calculatePrice(int discount); // To calculate total price

@@ -2,7 +2,7 @@
 #include<string>
 using namespace std;
 
-int N ;                                
+int N = 5; // Maximum number of orders
 int f = -1, r = -1;
 const int margheritaPrice = 150;
 const int veggieSupremePrice = 200;
@@ -10,9 +10,9 @@ const int chickenFiestaPrice = 250;
 
 class Pizza {
     string name, add;    // name, address of the order
-    int q;               // quantity of pizzas
-    int pizzaType;       // type of pizza 
-    float totalPrice;    // total price 
+    int q;               // quantity
+    int pizzaType;       // type of pizza (1: Margherita, 2: Veggie Supreme, 3: Chicken Fiesta)
+    float totalPrice;    // total price including discount
 public:
     void acceptOrder();   // To accept the order
     void serveOrder();    // To take the order and delete it
@@ -43,7 +43,7 @@ void Pizza::acceptOrder() {
     cout << "1. Margherita (Rs. 150)\n";
     cout << "2. Veggie Supreme (Rs. 200)\n";
     cout << "3. Chicken Fiesta (Rs. 250)\n";
-    cout << "Enter your choice : ";
+    cout << "Enter your choice ): ";
     cin >> P[r].pizzaType;
 
     // Calculate price and apply discount for the first customer

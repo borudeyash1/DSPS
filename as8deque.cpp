@@ -9,7 +9,7 @@ private:
     int front, rear; // Indices for front and rear
 
 public:
-    Deque(int size) : n(size), front(-1), rear(-1) {
+    Deque(int size) : n(size), front(-1), rear(-1) {            //parameterized constructor
         D = new int[n]; // Allocate memory for the deque
     }
 

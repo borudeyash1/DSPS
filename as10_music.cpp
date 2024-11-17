@@ -1,4 +1,4 @@
-a /*usic library system is a software application used to manage the storage and retrieval of music and albums.System needs to maintain information such as track title,artist,album ,genre,duration,,relese year
+/*usic library system is a software application used to manage the storage and retrieval of music and albums.System needs to maintain information such as track title,artist,album ,genre,duration,,relese year
 and any other relevant attributes .System should be able to add new music tracks,search the specific .Also ,it should be able to display the track information which are present in the database.Use the concept using the concept of doubly linked list.etc*/
 
 #include<iostream>
@@ -33,4 +33,5 @@ void MLS::accept() {
             temp=tem
         }
 
+    }
 }

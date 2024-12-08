@@ -84,6 +84,7 @@ void Lsearch::FALsearch() // Finding first and last occurrence
     }
 }
 
+
 int main()
 {
     int choice = 0;  // Initialize choice to avoid garbage value

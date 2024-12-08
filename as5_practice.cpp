@@ -1,88 +1,76 @@
-<<<<<<< HEAD
 #include <iostream>
-#include <string>
 #include <stack>
-
+#include <cstring>
 using namespace std;
-#define max = 50;
-int top = -1;
-int precedence(char)
-{
-    int c;
-    if (c == '-' | c == '+')
-    {
-        return 1;
-    }
-    else if (c == '*' | c == '/')
-    {
-        return 2;
-    }
-    else if (c == '^')
-    {
-        return 3;
-    }
+
+#define MAX 50
+
+// function to return procedence of operators
+int precedence(char c){
+    if( c == '+' || c =='-')
+    return 1;
+    if( c == '*' || c =='/')
+    return 2;
+    if(c =='^')
+    return 3;
     return 0;
 }
 
+//function to check if character is an operand (i.e , a letter or digit)
 bool isOperand(char c){
-    return (c >= 'a' && c<='z') || (c>='A' && c <='Z') ||( c>= '0' && c<='9');
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
 }
 
-string infixToPostfix(string infix)
-{
-    stack <char> st;
-    string postfix = " ";
+//fucntion to convert infix expression to postfix expression 
+string infixToPostfix(string infix) {
+    stack<char> st;
+    string postfix = "";
 
-    for (int i = 0 ;i<infix.length();i++)
-    {
-        char c= infix[i];
+    for (int i = 0; i < infix.length(); i++) {
+        char c = infix[i];
 
-        if(isOperand(c)){
-            postfix+=c;
+        // If the character is an operand, add it to the output
+        if (isOperand(c)) {
+            postfix += c;
+        }
+        // If the character is '(', push it to the stack
+        else if (c == '(') {
+            st.push(c);
+        }
+        // If the character is ')', pop and add to output until '(' is found
+        else if (c == ')') {
+            while (!st.empty() && st.top() != '(') {
+                postfix += st.top();
+                st.pop();
+            }
+            st.pop(); // Pop '(' from the stack
+        }
+        // If an operator is found
+        else {
+            while (!st.empty() && precedence(st.top()) >= precedence(c)) {
+                postfix += st.top();
+                st.pop();
+            }
+            st.push(c);
         }
     }
-=======
-#include <iostream>
-#include <string>
-#include <stack>
 
-using namespace std;
-#define max = 50;
-int top = -1;
-int precedence(char)
-{
-    int c;
-    if (c == '-' | c == '+')
-    {
-        return 1;
+    // Pop all the remaining operators from the stack
+    while (!st.empty()) {
+        postfix += st.top();
+        st.pop();
     }
-    else if (c == '*' | c == '/')
-    {
-        return 2;
-    }
-    else if (c == '^')
-    {
-        return 3;
-    }
+
+    return postfix;
+}
+int main() {
+    string infix;
+    cout << "Enter an infix expression: ";
+    cin >> infix;
+
+    string postfix = infixToPostfix(infix);
+    cout << "Postfix expression: " << postfix << endl;
+
     return 0;
 }
 
-bool isOperand(char c){
-    return (c >= 'a' && c<='z') || (c>='A' && c <='Z') ||( c>= '0' && c<='9');
-}
-
-string infixToPostfix(string infix)
-{
-    stack <char> st;
-    string postfix = " ";
-
-    for (int i = 0 ;i<infix.length();i++)
-    {
-        char c= infix[i];
-
-        if(isOperand(c)){
-            postfix+=c;
-        }
-    }
->>>>>>> 0b63ba78b78fff2b557d66926e88acb925d1e289
-}

@@ -84,7 +84,7 @@ public:
 
         for (int i = 0; i < length; i++) {
             if (s[i] >= 'a' && s[i] <= 'z') {
-                s[i] = s[i] - ('a' - 'A');  // Convert lowercase to uppercase
+                s[i] = s[i] - 32;  // Convert lowercase to uppercase
             }
         }
     }
@@ -98,7 +98,7 @@ public:
 
         for (int i = 0; i < length; i++) {
             if (s[i] >= 'A' && s[i] <= 'Z') {
-                s[i] = s[i] + ('a' - 'A');  // Convert uppercase to lowercase
+                s[i] = s[i] + 32;  // Convert uppercase to lowercase
             }
         }
     }

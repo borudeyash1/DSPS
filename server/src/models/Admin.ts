@@ -1,0 +1,126 @@
+import mongoose, { Schema } from 'mongoose';
+import bcrypt from 'bcryptjs';
+import { IAdmin } from '../types';
+
+const ShippingAddressSchema = new Schema({
+    street: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    city: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    state: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    pincode: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    country: {
+        type: String,
+        required: true,
+        trim: true,
+        default: 'India'
+    },
+    isDefault: {
+        type: Boolean,
+        default: false
+    }
+});
+
+const adminSchema = new Schema<IAdmin>({
+    email: {
+        type: String,
+        required: [true, 'Email is required'],
+        unique: true,
+        lowercase: true,
+        trim: true,
+        index: true
+    },
+    password: {
+        type: String,
+        required: [true, 'Password is required'],
+        minlength: [6, 'Password must be at least 6 characters'],
+        select: false // Don't return password by default
+    },
+    fullName: {
+        type: String,
+        trim: true
+    },
+    phone: {
+        type: String,
+        trim: true,
+        match: [/^[\d\s\-\(\)\+]+$/, 'Please enter a valid phone number']
+    },
+    bio: {
+        type: String,
+        trim: true,
+        maxlength: 500
+    },
+    avatar: {
+        type: String,
+        trim: true
+    },
+
+    role: {
+        type: String,
+        enum: ['super-admin', 'admin', 'developer'],
+        default: 'admin'
+    },
+    isActive: {
+        type: Boolean,
+        default: true
+    },
+    lastLogin: {
+        type: Date
+    },
+    loginOTP: {
+        type: String,
+        select: false
+    },
+    loginOTPExpires: {
+        type: Date,
+        select: false
+    },
+    shippingAddresses: [ShippingAddressSchema]
+}, {
+    timestamps: true
+});
+
+// Index for faster queries
+adminSchema.index({ email: 1, isActive: 1 });
+
+// Hash password before saving
+adminSchema.pre('save', async function (this: IAdmin, next) {
+    if (!this.isModified('password') || !this.password) {
+    // @ts-ignore
+        return next();
+    }
+
+    try {
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
+    // @ts-ignore
+        next();
+    } catch (error: any) {
+    // @ts-ignore
+        next(error);
+    }
+});
+
+// Method to compare password
+adminSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
+    if (!this.password) {
+        return false;
+    }
+    return bcrypt.compare(candidatePassword, this.password);
+};
+
+export default mongoose.model<IAdmin>('Admin', adminSchema);

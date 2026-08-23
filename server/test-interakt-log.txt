@@ -1,0 +1,25 @@
+🧪 Testing Interakt Order Placed Notification
+
+============================================================
+✅ Interakt API Key found
+📱 Target Phone: 7507974511
+📦 Order Number: #TEST123
+
+📋 Using Template: order_confirmation_74
+
+📤 Sending order placed notification...
+
+
+============================================================
+✅ SUCCESS! WhatsApp notification sent successfully!
+
+📱 Check your phone (7507974511) for the message
+
+Response Data: {
+  "result": true,
+  "message": "Message queued for sending via Interakt. Check webhook for delivery status",
+  "id": "9109bbf6-cfee-407f-8251-39af5292ab39"
+}
+============================================================
+
+✅ Test completed

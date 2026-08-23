@@ -1,0 +1,189 @@
+{
+  "query": {
+    "paymentStatus": "completed",
+    "status": {
+      "$ne": "cancelled"
+    }
+  },
+  "filteredCount": 14,
+  "manualCancelledCountInAllCompleted": 1,
+  "filteredOrdersSample": [
+    {
+      "id": "693c9d0d56dd166ce2277523",
+      "status": "delivered",
+      "amount": 534,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "693ca5367c2a7242b08af37d",
+      "status": "delivered",
+      "amount": 100,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "693cb502209608856a71c6bb",
+      "status": "delivered",
+      "amount": 3217,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "693d1b32877c318da1a81820",
+      "status": "delivered",
+      "amount": 3061,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "693d277c915ea72e590f5751",
+      "status": "delivered",
+      "amount": 2839,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "693d3128bf5a5e2d8fb5ddd6",
+      "status": "delivered",
+      "amount": 100,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "69675d3d02e949d99cd7ec7c",
+      "status": "delivered",
+      "amount": 1928,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "696787652748bd26cd435dc3",
+      "status": "delivered",
+      "amount": 7132,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "6967a3bd60ce1743a42b4f10",
+      "status": "delivered",
+      "amount": 3566,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "6967bf936e498ea3a993afda",
+      "status": "delivered",
+      "amount": 3052,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "6967c88c5337f03718f91835",
+      "status": "delivered",
+      "amount": 2338,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "6967e8659595a4ffcde8a728",
+      "status": "delivered",
+      "amount": 3,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "696914c1e498ea964513d2a4",
+      "status": "delivered",
+      "amount": 14,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "696f741eca6b30acffcad86d",
+      "status": "delivered",
+      "amount": 14,
+      "paymentStatus": "completed"
+    }
+  ],
+  "cancelledOrdersInQuery": 0,
+  "allCompletedSample": [
+    {
+      "id": "693c9d0d56dd166ce2277523",
+      "status": "delivered",
+      "amount": 534,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "693ca5367c2a7242b08af37d",
+      "status": "delivered",
+      "amount": 100,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "693cb502209608856a71c6bb",
+      "status": "delivered",
+      "amount": 3217,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "693d1b32877c318da1a81820",
+      "status": "delivered",
+      "amount": 3061,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "693d277c915ea72e590f5751",
+      "status": "delivered",
+      "amount": 2839,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "693d3128bf5a5e2d8fb5ddd6",
+      "status": "delivered",
+      "amount": 100,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "693d928e7b3c6fe016901cdf",
+      "status": "cancelled",
+      "amount": 1140,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "69675d3d02e949d99cd7ec7c",
+      "status": "delivered",
+      "amount": 1928,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "696787652748bd26cd435dc3",
+      "status": "delivered",
+      "amount": 7132,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "6967a3bd60ce1743a42b4f10",
+      "status": "delivered",
+      "amount": 3566,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "6967bf936e498ea3a993afda",
+      "status": "delivered",
+      "amount": 3052,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "6967c88c5337f03718f91835",
+      "status": "delivered",
+      "amount": 2338,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "6967e8659595a4ffcde8a728",
+      "status": "delivered",
+      "amount": 3,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "696914c1e498ea964513d2a4",
+      "status": "delivered",
+      "amount": 14,
+      "paymentStatus": "completed"
+    },
+    {
+      "id": "696f741eca6b30acffcad86d",
+      "status": "delivered",
+      "amount": 14,
+      "paymentStatus": "completed"
+    }
+  ]
+}

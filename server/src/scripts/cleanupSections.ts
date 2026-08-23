@@ -1,0 +1,76 @@
+import mongoose from 'mongoose';
+import Section from '../models/Section';
+import CategoryPageSection from '../models/CategoryPageSection';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+async function cleanupNonMensSections() {
+    try {
+        // Connect to MongoDB
+        await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/botam-apparels');
+        console.log('✅ Connected to MongoDB');
+
+        // Count sections before cleanup
+        const totalSectionsBefore = await Section.countDocuments();
+    // @ts-ignore
+        const womenSections = await Section.countDocuments({ page: 'women' });
+    // @ts-ignore
+        const kidsSections = await Section.countDocuments({ page: 'kids' });
+    // @ts-ignore
+        const livingSections = await Section.countDocuments({ page: 'living' });
+
+        const totalCategorySectionsBefore = await CategoryPageSection.countDocuments();
+    // @ts-ignore
+        const womenCategorySections = await CategoryPageSection.countDocuments({ category: 'women' });
+    // @ts-ignore
+        const kidsCategorySections = await CategoryPageSection.countDocuments({ category: 'kids' });
+    // @ts-ignore
+        const livingCategorySections = await CategoryPageSection.countDocuments({ category: 'living' });
+
+        console.log('\n📊 Current Section Count:');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log(`   Total Sections: ${totalSectionsBefore}`);
+        console.log(`   Women Sections: ${womenSections}`);
+        console.log(`   Kids Sections: ${kidsSections}`);
+        console.log(`   Living Sections: ${livingSections}`);
+        console.log(`\n   Total Category Page Sections: ${totalCategorySectionsBefore}`);
+        console.log(`   Women Category Sections: ${womenCategorySections}`);
+        console.log(`   Kids Category Sections: ${kidsCategorySections}`);
+        console.log(`   Living Category Sections: ${livingCategorySections}`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+        // Delete sections for removed pages
+        const deleteSectionsResult = await Section.deleteMany({
+    // @ts-ignore
+            page: { $in: ['women', 'kids', 'living'] }
+        });
+
+        // Delete category page sections for removed categories
+        const deleteCategorySectionsResult = await CategoryPageSection.deleteMany({
+    // @ts-ignore
+            category: { $in: ['women', 'kids', 'living'] }
+        });
+
+        console.log('🗑️  Cleanup Results:');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log(`   ✅ Deleted ${deleteSectionsResult.deletedCount} page sections`);
+        console.log(`   ✅ Deleted ${deleteCategorySectionsResult.deletedCount} category page sections`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+        // Verify final count
+        const totalSectionsAfter = await Section.countDocuments();
+        const totalCategorySectionsAfter = await CategoryPageSection.countDocuments();
+        console.log(`📊 Final Section Count: ${totalSectionsAfter}`);
+        console.log(`📊 Final Category Section Count: ${totalCategorySectionsAfter}`);
+        console.log('✅ Section cleanup completed successfully!\n');
+
+        process.exit(0);
+    } catch (error) {
+        console.error('❌ Error cleaning up sections:', error);
+        process.exit(1);
+    }
+}
+
+// Run the cleanup
+cleanupNonMensSections();

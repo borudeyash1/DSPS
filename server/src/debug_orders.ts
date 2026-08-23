@@ -1,0 +1,50 @@
+
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+import Order from './models/Order';
+import path from 'path';
+import fs from 'fs';
+
+dotenv.config({ path: path.join(__dirname, '../.env') });
+
+const debugOrders = async () => {
+    try {
+        await mongoose.connect(process.env.MONGODB_URI as string);
+        console.log('Connected to DB');
+
+        const query = {
+            paymentStatus: 'completed',
+            status: { $ne: 'cancelled' }
+        };
+    // @ts-ignore
+        const filteredOrders = await Order.find(query);
+
+        const allCompleted = await Order.find({ paymentStatus: 'completed' });
+
+        let cancelledCount = 0;
+        allCompleted.forEach(o => {
+            if (o.status === 'cancelled') {
+                cancelledCount++;
+            }
+        });
+
+        const result = {
+            query: query,
+            filteredCount: filteredOrders.length,
+            manualCancelledCountInAllCompleted: cancelledCount,
+            filteredOrdersSample: filteredOrders.slice(0, 20).map(o => ({ id: o._id, status: o.status, amount: o.totalAmount, paymentStatus: o.paymentStatus })),
+            cancelledOrdersInQuery: filteredOrders.filter(o => o.status === 'cancelled').length,
+            allCompletedSample: allCompleted.slice(0, 20).map(o => ({ id: o._id, status: o.status, amount: o.totalAmount, paymentStatus: o.paymentStatus }))
+        };
+
+        fs.writeFileSync('debug_result.json', JSON.stringify(result, null, 2));
+        console.log('Written detailed results to debug_result.json');
+
+        process.exit(0);
+    } catch (error) {
+        console.error(error);
+        process.exit(1);
+    }
+};
+
+debugOrders();

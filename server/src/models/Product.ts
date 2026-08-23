@@ -1,0 +1,276 @@
+import mongoose, { Schema } from 'mongoose';
+import { IProduct } from '../types';
+
+const productSchema = new Schema<IProduct>({
+    name: {
+        type: String,
+        required: [true, 'Product name is required'],
+        trim: true,
+        maxlength: [200, 'Product name cannot exceed 200 characters']
+    },
+    description: {
+        type: String,
+        required: [true, 'Product description is required'],
+        trim: true,
+        maxlength: [2000, 'Description cannot exceed 2000 characters']
+    },
+    category: {
+        type: String,
+        required: [true, 'Category is required'],
+        lowercase: true
+    },
+    subcategory: {
+        type: String,
+        trim: true,
+        lowercase: true
+    },
+    type: {
+        type: String,
+        trim: true
+    },
+    price: {
+        type: Number,
+        required: [true, 'Price is required'],
+        min: [0, 'Price cannot be negative']
+    },
+    discountPrice: {
+        type: Number,
+        min: [0, 'Discount price cannot be negative']
+    },
+    stock: {
+        type: Number,
+        required: [true, 'Stock is required'],
+        min: [0, 'Stock cannot be negative'],
+        default: 0
+    },
+    sizes: [{
+        type: String,
+        enum: ['One Size', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
+    }],
+    colors: [{
+        type: String,
+        trim: true
+    }],
+    // Legacy variants (keeping for backward compatibility)
+    variants: [{
+        size: {
+            type: String,
+            enum: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'],
+            required: true
+        },
+        color: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        price: {
+            type: Number,
+            required: true,
+            min: [0, 'Price cannot be negative']
+        },
+        discountPrice: {
+            type: Number,
+            min: [0, 'Discount price cannot be negative']
+        },
+        stock: {
+            type: Number,
+            required: true,
+            min: [0, 'Stock cannot be negative'],
+            default: 0
+        },
+        sku: {
+            type: String,
+            trim: true
+        }
+    }],
+    // Legacy images (keeping for backward compatibility)
+    images: [{
+        url: {
+            type: String,
+            required: true
+        },
+        publicId: {
+            type: String,
+            required: true
+        },
+        isMain: {
+            type: Boolean,
+            default: false
+        }
+    }],
+    videos: [{
+        url: {
+            type: String,
+            required: true
+        },
+        publicId: {
+            type: String,
+            required: true
+        },
+        thumbnail: {
+            type: String
+        }
+    }],
+    // Phase 4: Size Chart
+    sizeChart: {
+        image: {
+            type: String,
+            default: ''
+        },
+        measurements: [{
+            size: {
+                type: String,
+                enum: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'],
+                required: true
+            },
+            chest: String,
+            length: String,
+            shoulder: String,
+            sleeve: String,
+            waist: String,
+            hip: String
+        }]
+    },
+    // Phase 4: Delivery Information
+    deliveryInfo: {
+        estimatedDays: {
+            type: Number,
+            default: 7,
+            min: [1, 'Estimated delivery must be at least 1 day']
+        },
+        freeShippingThreshold: {
+            type: Number,
+            default: 0,
+            min: [0, 'Free shipping threshold cannot be negative']
+        },
+        returnPolicy: {
+            type: String,
+            default: '7 days return policy'
+        }
+    },
+    // Phase 4: Color Variants with View Angle Images
+    colorVariants: [{
+        color: {
+            type: String,
+            required: true
+        },
+        colorHex: {
+            type: String,
+            default: ''
+        },
+        images: [{
+            view: {
+                type: String,
+                enum: ['front', 'back', 'side', 'detail', 'worn'],
+                required: true
+            },
+            url: {
+                type: String,
+                required: true
+            },
+            alt: {
+                type: String,
+                default: ''
+            }
+        }],
+        stock: {
+            type: Number,
+            default: 0
+        },
+        sku: {
+            type: String,
+            default: ''
+        }
+    }],
+    // Phase 4: Available View Angles
+    viewAngles: [{
+        type: String,
+        enum: ['front', 'back', 'side', 'detail', 'worn']
+    }],
+    // Product Status
+    status: {
+        type: String,
+        enum: ['active', 'coming-soon', 'inactive'],
+        default: 'active'
+    },
+    // Size Guide Reference (Auto-matched based on product type)
+    // @ts-ignore
+    sizeGuideId: {
+        type: Schema.Types.ObjectId,
+        ref: 'SizeGuide'
+    },
+    isFeatured: {
+        type: Boolean,
+        default: false
+    },
+    isActive: {
+        type: Boolean,
+        default: true
+    },
+    rating: {
+        type: Number,
+        default: 0,
+        min: [0, 'Rating cannot be negative'],
+        max: [6, 'Rating cannot exceed 6']
+    },
+    reviewCount: {
+        type: Number,
+        default: 0,
+        min: [0, 'Review count cannot be negative']
+    },
+    wishlistCount: {
+        type: Number,
+        default: 0,
+        min: [0, 'Wishlist count cannot be negative']
+    },
+    // Shiprocket Integration: Shipping Information
+    shippingInfo: {
+        weight: {
+            type: Number,
+            default: 0.5, // Default 500g for apparel
+            min: [0, 'Weight cannot be negative']
+        },
+        length: {
+            type: Number,
+            default: 10, // cm
+            min: [0, 'Length cannot be negative']
+        },
+        breadth: {
+            type: Number,
+            default: 10, // cm
+            min: [0, 'Breadth cannot be negative']
+        },
+        height: {
+            type: Number,
+            default: 10, // cm
+            min: [0, 'Height cannot be negative']
+        },
+        hsn: {
+            type: String,
+            default: '6109', // Default HSN for T-shirts
+            trim: true
+        },
+        sku: {
+            type: String,
+            trim: true,
+            uppercase: true
+        },
+        packagingType: {
+            type: String,
+            enum: ['poly-bag', 'box', 'envelope'],
+            default: 'poly-bag'
+        }
+    }
+}, {
+    timestamps: true
+});
+
+// Indexes for better query performance
+productSchema.index({ category: 1 });
+productSchema.index({ subcategory: 1 });
+productSchema.index({ price: 1 });
+productSchema.index({ isFeatured: 1 });
+productSchema.index({ isActive: 1 });
+productSchema.index({ name: 'text', description: 'text' }); // Text search
+
+export default mongoose.model<IProduct>('Product', productSchema);

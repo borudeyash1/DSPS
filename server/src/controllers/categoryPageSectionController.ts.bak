@@ -1,0 +1,192 @@
+import { Request, Response } from 'express';
+import CategoryPageSection from '../models/CategoryPageSection';
+import { AuthenticatedRequest } from '../types';
+
+// Create category page section (ADMIN)
+export const createCategoryPageSection = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const sectionData = req.body;
+
+        const section = new CategoryPageSection(sectionData);
+        await section.save();
+
+        res.status(201).json({
+            success: true,
+            message: 'Category page section created successfully',
+            data: section,
+        });
+    } catch (error: any) {
+        console.error('Create category page section error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to create category page section',
+        });
+    }
+};
+
+// Get sections by category (ADMIN)
+export const getSectionsByCategory = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { category } = req.params;
+
+        const sections = await CategoryPageSection.find({ category }).sort({ order: 1 });
+
+        res.status(200).json({
+            success: true,
+            data: sections,
+        });
+    } catch (error: any) {
+        console.error('Get sections by category error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch sections',
+        });
+    }
+};
+
+// Get section by ID (ADMIN)
+export const getCategoryPageSectionById = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+
+        const section = await CategoryPageSection.findById(id);
+
+        if (!section) {
+            res.status(404).json({
+                success: false,
+                message: 'Category page section not found',
+            });
+            return;
+        }
+
+        res.status(200).json({
+            success: true,
+            data: section,
+        });
+    } catch (error: any) {
+        console.error('Get category page section by ID error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch section',
+        });
+    }
+};
+
+// Update category page section (ADMIN)
+export const updateCategoryPageSection = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const updates = req.body;
+
+        const section = await CategoryPageSection.findByIdAndUpdate(
+            id,
+            updates,
+            { new: true, runValidators: true }
+        );
+
+        if (!section) {
+            res.status(404).json({
+                success: false,
+                message: 'Category page section not found',
+            });
+            return;
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Category page section updated successfully',
+            data: section,
+        });
+    } catch (error: any) {
+        console.error('Update category page section error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to update section',
+        });
+    }
+};
+
+// Delete category page section (ADMIN)
+export const deleteCategoryPageSection = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+
+        const section = await CategoryPageSection.findByIdAndDelete(id);
+
+        if (!section) {
+            res.status(404).json({
+                success: false,
+                message: 'Category page section not found',
+            });
+            return;
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Category page section deleted successfully',
+        });
+    } catch (error: any) {
+        console.error('Delete category page section error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to delete section',
+        });
+    }
+};
+
+// Reorder category page sections (ADMIN)
+export const reorderCategoryPageSections = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const { category } = req.params;
+        const { sections } = req.body; // Array of { id, order }
+
+        if (!Array.isArray(sections)) {
+            res.status(400).json({
+                success: false,
+                message: 'Sections must be an array',
+            });
+            return;
+        }
+
+        // Update each section's order
+        const updatePromises = sections.map(({ id, order }) =>
+            CategoryPageSection.findByIdAndUpdate(id, { order }, { new: true })
+        );
+
+        await Promise.all(updatePromises);
+
+        const updatedSections = await CategoryPageSection.find({ category }).sort({ order: 1 });
+
+        res.status(200).json({
+            success: true,
+            message: 'Category page sections reordered successfully',
+            data: updatedSections,
+        });
+    } catch (error: any) {
+        console.error('Reorder category page sections error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to reorder sections',
+        });
+    }
+};
+
+// Get active sections by category (PUBLIC)
+export const getActiveSectionsByCategory = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { category } = req.params;
+
+        const sections = await CategoryPageSection.find({ category, isActive: true }).sort({ order: 1 });
+
+        res.status(200).json({
+            success: true,
+            data: sections,
+        });
+    } catch (error: any) {
+        console.error('Get active sections by category error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch active sections',
+        });
+    }
+};

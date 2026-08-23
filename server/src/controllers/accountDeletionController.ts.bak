@@ -1,0 +1,135 @@
+import crypto from 'crypto';
+import { Request, Response } from 'express';
+import User from '../models/User';
+import { AuthenticatedRequest } from '../types';
+import { sendEmailNotification } from '../services/notificationService';
+
+// Request account deletion
+export const requestAccountDeletion = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.user?._id;
+        const { password } = req.body;
+
+        if (!password) {
+            res.status(400).json({
+                success: false,
+                message: 'Password is required to delete account'
+            });
+            return;
+        }
+
+        const user = await User.findById(userId).select('+password');
+
+        if (!user) {
+            res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+            return;
+        }
+
+        // Verify password
+        const isPasswordValid = await user.comparePassword(password);
+        if (!isPasswordValid) {
+            res.status(401).json({
+                success: false,
+                message: 'Incorrect password'
+            });
+            return;
+        }
+
+        // Generate deletion token
+        const deletionToken = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+        (user as any).deletionToken = deletionToken;
+        (user as any).deletionTokenExpires = expiresAt;
+        await user.save();
+
+        // Send confirmation email
+        await sendEmailNotification({
+            type: 'account_deletion_request',
+            email: user.email,
+            fullName: user.fullName,
+            userId: user._id.toString(),
+            token: deletionToken,
+            expiresAt: expiresAt.toISOString()
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Deletion confirmation email sent. Please check your email.'
+        });
+    } catch (error: any) {
+        console.error('Request account deletion error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
+// Confirm account deletion
+export const confirmAccountDeletion = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { token, userId } = req.query;
+
+        if (!token || !userId) {
+            res.status(400).send('<h1>Invalid deletion link</h1>');
+            return;
+        }
+
+        const user = await User.findOne({
+            _id: userId,
+            deletionToken: token,
+            deletionTokenExpires: { $gt: new Date() }
+        }).select('+deletionToken +deletionTokenExpires');
+
+        if (!user) {
+            res.status(400).send(`
+                <html>
+                    <head>
+                        <style>
+                            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                            h1 { color: #E63946; }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>Invalid or Expired Link</h1>
+                        <p>This account deletion link is invalid or has expired.</p>
+                        <p><a href="https://ecom.sartthi.com">Return to Home</a></p>
+                    </body>
+                </html>
+            `);
+            return;
+        }
+
+        // Delete user account
+        await User.findByIdAndDelete(userId);
+
+        // Redirect to homepage with success message
+        res.send(`
+            <html>
+                <head>
+                    <style>
+                        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                        h1 { color: #4CAF50; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Account Deleted Successfully</h1>
+                    <p>Your account has been permanently deleted.</p>
+                    <p>You will be redirected to the homepage in 3 seconds...</p>
+                    <script>
+                        setTimeout(() => {
+                            window.location.href = 'https://ecom.sartthi.com';
+                        }, 3000);
+                    </script>
+                </body>
+            </html>
+        `);
+    } catch (error: any) {
+        console.error('Confirm account deletion error:', error);
+        res.status(500).send('<h1>Error deleting account</h1>');
+    }
+};

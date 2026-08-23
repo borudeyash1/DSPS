@@ -1,0 +1,963 @@
+import { Response } from 'express';
+import mongoose from 'mongoose';
+import Order from '../models/Order';
+import Product from '../models/Product';
+import { AuthenticatedRequest } from '../types';
+import Notification from '../models/Notification';
+import Coupon from '../models/Coupon';
+
+import { orderStateManager } from '../services/orderStateManager';
+import {
+    validateAndSanitizeShippingAddress,
+    validateOrderItems,
+    validatePaymentMethod,
+    sanitizeCouponCode,
+    checkRateLimit,
+    MAX_LENGTHS
+} from '../utils/validation';
+
+// Create order (AUTHENTICATED - requires login)
+export const createOrder = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.user!._id;
+
+        // Rate limiting check (10 orders per minute per user)
+        const userIp = req.ip || req.socket.remoteAddress || 'unknown';
+        if (!checkRateLimit(`order_${userId}_${userIp}`, 10, 60000)) {
+            res.status(429).json({
+                success: false,
+                message: 'Too many order requests. Please try again later.'
+            });
+            return;
+        }
+
+        const { items, shippingAddress, paymentMethod, couponCode, discountAmount: reqDiscountAmount, paymentDetails } = req.body;
+
+        // Validate and sanitize inputs
+        try {
+            // Validate order items
+            validateOrderItems(items);
+
+            // Validate and sanitize shipping address
+            const sanitizedAddress = validateAndSanitizeShippingAddress(shippingAddress);
+            req.body.shippingAddress = sanitizedAddress;
+
+            // Validate payment method
+            const sanitizedPaymentMethod = validatePaymentMethod(paymentMethod);
+            req.body.paymentMethod = sanitizedPaymentMethod;
+
+            // Validate coupon code if provided
+            if (couponCode) {
+                req.body.couponCode = sanitizeCouponCode(couponCode);
+            }
+
+            // Validate payment details if provided
+            if (paymentDetails) {
+                if (typeof paymentDetails !== 'object') {
+                    throw new Error('Invalid payment details format');
+                }
+                // Sanitize payment detail strings
+                if (paymentDetails.paymentId && typeof paymentDetails.paymentId === 'string') {
+                    if (paymentDetails.paymentId.length > 100) {
+                        throw new Error('Invalid payment ID');
+                    }
+                }
+                if (paymentDetails.orderId && typeof paymentDetails.orderId === 'string') {
+                    if (paymentDetails.orderId.length > 100) {
+                        throw new Error('Invalid order ID');
+                    }
+                }
+            }
+        } catch (validationError: any) {
+            console.error('Validation error:', validationError.message);
+            res.status(400).json({
+                success: false,
+                message: validationError.message || 'Invalid input data'
+            });
+            return;
+        }
+
+        // Validate items and calculate total
+        let totalAmount = 0;
+        const orderItems = [];
+
+        for (const item of items) {
+            // Validate ObjectId format
+            if (!mongoose.Types.ObjectId.isValid(item.productId)) {
+                res.status(400).json({ success: false, message: `Invalid product ID format: ${item.productId}` });
+                return;
+            }
+
+            const product = await Product.findById(item.productId);
+            if (!product) {
+                res.status(404).json({ success: false, message: `Product not found: ${item.productId}` });
+                return;
+            }
+
+            if (product.stock < item.quantity) {
+                res.status(400).json({ success: false, message: `Insufficient stock for ${product.name}` });
+                return;
+            }
+
+            const itemPrice = product.discountPrice || product.price;
+            totalAmount += itemPrice * item.quantity;
+
+            // Get image URL and ensure it's a full URL
+            let imageUrl = product.images?.[0]?.url || '';
+
+            // If image URL is relative, make it absolute
+            if (imageUrl && !imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+                const baseUrl = process.env.BASE_URL || process.env.CLIENT_URL?.replace('/api', '') || 'http://localhost:5000';
+                imageUrl = imageUrl.startsWith('/') ? `${baseUrl}${imageUrl}` : `${baseUrl}/${imageUrl}`;
+            }
+
+            orderItems.push({
+                product: product._id,
+                name: product.name,
+                price: itemPrice,
+                quantity: item.quantity,
+                size: item.size,
+                color: item.color,
+                image: imageUrl,
+            });
+
+            // Reduce stock
+            product.stock -= item.quantity;
+            await product.save();
+        }
+
+        // Create order
+        let finalTotal = totalAmount;
+        let finalDiscount = 0;
+        let appliedCouponCode = undefined;
+
+        // Server-side Coupon Validation
+        if (couponCode) {
+            const coupon = await Coupon.findOne({
+                code: couponCode.toUpperCase(),
+                isActive: true,
+                expirationDate: { $gt: new Date() }
+            });
+
+            if (coupon) {
+                // Check usage limits if you have them (e.g. maxUses)
+                // For now, simple validation
+
+                let discount = 0;
+                if (coupon.type === 'percentage') {
+                    discount = (totalAmount * coupon.value) / 100;
+                    if (coupon.maxDiscountAmount && discount > coupon.maxDiscountAmount) {
+                        discount = coupon.maxDiscountAmount;
+                    }
+                } else if (coupon.type === 'fixed') {
+                    discount = coupon.value;
+                }
+
+                // Ensure discount doesn't exceed total
+                if (discount > totalAmount) {
+                    discount = totalAmount;
+                }
+
+                if (coupon.minOrderAmount && totalAmount < coupon.minOrderAmount) {
+                    // Coupon requirements not met, ignore it or throw error? 
+                    // Giving benefit of doubt to UI, just ignore if invalid
+                    console.log(`Coupon ${couponCode} min purchase not met`);
+                    appliedCouponCode = undefined;
+                    finalDiscount = 0;
+                } else {
+                    finalDiscount = Math.round(discount); // Round to avoid float issues
+                    finalTotal = Math.max(0, totalAmount - finalDiscount);
+                    appliedCouponCode = coupon.code;
+
+                    // Optional: Increment usage count
+                    // await Coupon.findByIdAndUpdate(coupon._id, { $inc: { usedCount: 1 } });
+                }
+            } else {
+                console.log(`Invalid or expired coupon: ${couponCode}`);
+                // Invalid coupon, proceed without discount
+            }
+        }
+
+        // Determine payment status based on payment method and details
+        let paymentStatus: 'pending' | 'completed' | 'failed' = 'pending';
+
+        // If online payment and paymentDetails are provided (meaning payment was verified), mark as completed
+        if (paymentMethod === 'online' && paymentDetails && paymentDetails.paymentId) {
+            paymentStatus = 'completed';
+            console.log(`✅ Online payment verified - Payment ID: ${paymentDetails.paymentId}`);
+        } else if (paymentMethod === 'cod') {
+            console.log('📦 COD order - Payment status: pending');
+        }
+
+        const order = new Order({
+            user: userId,
+            items: orderItems,
+            shippingAddress,
+            // Calculate final amount after discount
+            totalAmount: finalTotal, // Server-calculated total
+            discountAmount: finalDiscount,
+            couponCode: appliedCouponCode,
+            paymentMethod: paymentMethod || 'cod',
+            paymentDetails: paymentDetails ? {
+                paymentId: paymentDetails.paymentId,
+                orderId: paymentDetails.orderId,
+                signature: paymentDetails.signature,
+                method: paymentDetails.method,
+                paidAt: new Date()
+            } : undefined,
+            status: 'pending',
+            paymentStatus: paymentStatus,
+        });
+
+        await order.save();
+
+        // ---------------------------------------------------------
+        // HDFC Payment Integration (Online Payment Initiation)
+        // ---------------------------------------------------------
+        let onlinePaymentUrl = '';
+
+        if (paymentMethod === 'online' && (!paymentDetails || !paymentDetails.paymentId)) {
+            try {
+                // Determine user info
+                const userEmail = req.user!.email || '';
+                const userPhone = req.user!.phone || '';
+                const userName = req.user!.fullName || 'Customer';
+
+                const { createHDFCOrder } = await import('../utils/hdfcSmartGateway');
+
+                // Create session with HDFC
+                // Use a short receipt ID derived from order ID
+                const receiptId = `rcpt_${order._id.toString().slice(-8)}`;
+
+                const hdfcOrder = await createHDFCOrder(
+                    finalTotal,
+                    'INR',
+                    receiptId,
+                    { name: userName, email: userEmail, phone: userPhone }
+                );
+
+                if (hdfcOrder && hdfcOrder.paymentUrl) {
+                    onlinePaymentUrl = hdfcOrder.paymentUrl;
+
+                    // Update order with HDFC Order ID for tracking
+                    order.paymentDetails = {
+                        ...(order.paymentDetails || {}),
+                        orderId: hdfcOrder.id, // Store HDFC Order ID (ord...)
+                        method: 'HDFC_PG'
+                    };
+                    await order.save();
+
+                    console.log(`✅ HDFC Session created for Order ${order._id}: ${hdfcOrder.id}`);
+                } else {
+                    console.error('❌ Failed to generate HDFC payment URL');
+                    // If we can't get a payment URL, we must fail the order creation for the user
+                    // or at least tell them to try again.
+                    throw new Error('Failed to initiate payment gateway');
+                }
+            } catch (hdfcError: any) {
+                console.error('❌ HDFC Integration Error:', hdfcError.message);
+                // Fail the request so the frontend shows an error
+                // We should also probably mark the order as failed/cancelled
+                order.status = 'cancelled';
+                order.paymentStatus = 'failed';
+                await order.save();
+
+                throw new Error('Payment gateway initialization failed. Please try again or use COD.');
+            }
+        }
+        // ---------------------------------------------------------
+
+        // Automatically create shipment in Shiprocket (for both COD and prepaid orders)
+        try {
+            const { createShipmentAutomatically } = await import('../services/shippingAutomation');
+
+            console.log(`🚀 [ORDER] Attempting to create shipment for order: ${order._id}`);
+
+            // Create shipment with auto-AWB generation and pickup scheduling
+            const shipmentResult = await createShipmentAutomatically({
+                orderId: order._id.toString(),
+                autoGenerateAWB: true,
+                autoSchedulePickup: true // Automatically schedule pickup with courier
+            });
+
+            if (shipmentResult.success) {
+                console.log(`✅ [ORDER] Shipment created successfully:`, shipmentResult.data);
+            }
+        } catch (shipmentError: any) {
+            console.error(`⚠️  [ORDER] Shipment creation failed (non-critical):`, shipmentError.message);
+            // Don't fail the order if shipment creation fails - admin can create it manually
+        }
+
+        // Add order to user's order history (initialize if doesn't exist)
+        if (!req.user!.orderHistory) {
+            req.user!.orderHistory = [];
+        }
+        req.user!.orderHistory.push(order._id);
+        await req.user!.save();
+
+        // Create notification
+        await Notification.create({
+            user: userId,
+            type: 'ORDER_PLACED',
+            title: 'Order Placed Successfully',
+            message: `Your order #${order._id} has been placed successfully.`,
+            metadata: { orderId: order._id }
+        });
+
+        // Send order placed email
+        try {
+            const { sendEmailNotification } = await import('../services/notificationService');
+            const populatedOrder = await Order.findById(order._id).populate('items.product').populate('user');
+            const user = populatedOrder?.user as any;
+
+            if (user && user.email) {
+                await sendEmailNotification({
+                    type: 'order_placed',
+                    email: user.email,
+                    fullName: user.fullName,
+                    order: {
+                        orderId: order._id.toString(),
+                        orderNumber: `#${order._id.toString().slice(-6).toUpperCase()}`,
+                        date: order.createdAt.toISOString(),
+                        items: orderItems.map((item: any) => ({
+                            name: item.name,
+                            quantity: item.quantity,
+                            price: item.price,
+                            image: item.image
+                        })),
+                        subtotal: totalAmount,
+                        shipping: 0,
+                        tax: 0,
+                        total: order.totalAmount,
+                        shippingAddress: order.shippingAddress
+                    }
+                });
+            }
+        } catch (emailError) {
+            console.error('Failed to send order placed email:', emailError);
+            // Don't fail the order if email fails
+        }
+
+        // Send WhatsApp notification
+        try {
+            const populatedOrder = await Order.findById(order._id).populate('items.product').populate('user');
+            const user = populatedOrder?.user as any;
+
+            if (user && user.phone) {
+                const { sendWhatsAppNotification } = await import('../services/whatsappNotificationService');
+
+                await sendWhatsAppNotification({
+                    type: 'order_placed',
+                    userPhone: user.phone,
+                    fullName: user.fullName,
+                    order: {
+                        orderNumber: `#${order._id.toString().slice(-6).toUpperCase()}`
+                    }
+                });
+            }
+        } catch (waError) {
+            console.error('Failed to send WhatsApp notification:', waError);
+        }
+
+        // Create admin notification for new order
+        try {
+            const populatedOrder = await Order.findById(order._id).populate('user');
+            const user = populatedOrder?.user as any;
+            const orderNumber = `#${order._id.toString().slice(-6).toUpperCase()}`;
+
+            await Notification.create({
+                user: null,
+                type: 'ORDER_PLACED',
+                title: 'New Order Placed',
+                message: `New order ${orderNumber} from ${user?.fullName || 'Customer'} - ₹${order.totalAmount}`,
+                metadata: { orderId: order._id, userId: user?._id, amount: order.totalAmount },
+                isAdminNotification: true
+            });
+            console.log('✅ Admin notification created for new order');
+        } catch (notifError) {
+            console.error('❌ Failed to create admin notification:', notifError);
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Order placed successfully',
+            data: order,
+            paymentUrl: onlinePaymentUrl, // Return for frontend redirect
+        });
+        console.log(`✅ [Response] Sending order response. Payment URL: ${onlinePaymentUrl ? onlinePaymentUrl : 'NONE'}`);
+    } catch (error: any) {
+        console.error('Create order error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+        });
+    }
+};
+
+// Get user's orders (AUTHENTICATED)
+export const getUserOrders = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.user!._id;
+
+        const orders = await Order.find({ user: userId })
+            .sort('-createdAt')
+            .populate('items.product', 'name')
+            .lean();
+
+        // Sync with Shiprocket for orders with AWB codes
+        const enrichedOrders = await Promise.all(orders.map(async (order: any) => {
+            // If order has Shiprocket AWB, fetch latest tracking info
+            if (order.awbCode) {
+                try {
+                    const { getShiprocketService } = await import('../services/shiprocketService');
+                    const shiprocket = getShiprocketService();
+
+                    const trackingData = await shiprocket.trackShipment(order.awbCode);
+
+                    if (trackingData?.tracking_data) {
+                        const tracking = trackingData.tracking_data;
+
+                        // Update estimated delivery date from Shiprocket
+                        if (tracking.etd) {
+                            order.estimatedDeliveryDate = new Date(tracking.etd);
+                        }
+
+                        // Update courier tracking URL
+                        if (tracking.track_url) {
+                            order.courierTrackingUrl = tracking.track_url;
+                        }
+
+                        // Update Shiprocket status
+                        if (tracking.current_status || tracking.shipment_status) {
+                            order.shiprocketStatus = tracking.current_status || tracking.shipment_status;
+                        }
+                    }
+                } catch (trackingError: any) {
+                    // Silently fail - use existing data if tracking fails
+                    console.error(`⚠️ [USER_ORDERS] Failed to fetch tracking for AWB ${order.awbCode}:`, trackingError.message);
+                }
+            }
+            return order;
+        }));
+
+        res.status(200).json({
+            success: true,
+            message: 'Orders retrieved successfully',
+            data: enrichedOrders,
+        });
+    } catch (error: any) {
+        console.error('Get user orders error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+        });
+    }
+};
+
+// Get single order by ID (AUTHENTICATED - user can only view their own orders)
+export const getOrderById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const userId = req.user!._id;
+
+        const order = await Order.findById(id).populate('items.product', 'name');
+
+        if (!order) {
+            res.status(404).json({
+                success: false,
+                message: 'Order not found',
+            });
+            return;
+        }
+
+        // Check if order belongs to user (unless admin)
+        if (!req.isAdmin && order.user.toString() !== userId.toString()) {
+            res.status(403).json({
+                success: false,
+                message: 'Access denied',
+            });
+            return;
+        }
+
+        // Log the order items to debug image issue
+        console.log(`📦 Fetching order ${id}:`);
+        order.items.forEach((item: any, i: number) => {
+            console.log(`  Item ${i}: ${item.name}, image: "${item.image}"`);
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Order retrieved successfully',
+            data: order,
+        });
+    } catch (error: any) {
+        console.error('Get order error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+        });
+    }
+};
+
+// Get all orders (ADMIN ONLY)
+export const getAllOrders = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const {
+            status,
+            paymentStatus,
+            page = 1,
+            limit = 20,
+            sort = '-createdAt',
+        } = req.query;
+
+        // Build filter
+        const filter: any = {};
+
+        if (status) {
+            filter.status = status;
+        }
+
+        if (paymentStatus) {
+            filter.paymentStatus = paymentStatus;
+        }
+
+        if (req.query.search) {
+            const search = req.query.search as string;
+            const searchRegex = new RegExp(search, 'i');
+            const criteria = [];
+
+            // 1. Search by Order ID (exact or partial)
+            if (mongoose.Types.ObjectId.isValid(search)) {
+                criteria.push({ _id: search });
+            }
+
+            // 2. Search by Customer (Name, Email, Phone)
+            // We need to find matching users first
+            const matchingUsers = await mongoose.model('User').find({
+                $or: [
+                    { fullName: { $regex: searchRegex } },
+                    { email: { $regex: searchRegex } },
+                    { phone: { $regex: searchRegex } }
+                ]
+            }).select('_id');
+
+            if (matchingUsers.length > 0) {
+                criteria.push({ user: { $in: matchingUsers.map(u => u._id) } });
+            }
+
+            // 3. Search by Product Name (in items)
+            const matchingProducts = await Product.find({
+                name: { $regex: searchRegex }
+            }).select('_id');
+
+            if (matchingProducts.length > 0) {
+                criteria.push({ 'items.product': { $in: matchingProducts.map(p => p._id) } });
+            }
+
+            if (criteria.length > 0) {
+                filter.$or = criteria;
+            } else {
+                // If search provided but nothing found, ensure no results returned
+                res.status(200).json({
+                    success: true,
+                    message: 'Orders retrieved successfully',
+                    data: [],
+                    pagination: { page: Number(page), limit: Number(limit), total: 0, pages: 0 }
+                });
+                return;
+            }
+        }
+        const skip = (Number(page) - 1) * Number(limit);
+        const orders = await Order.find(filter)
+            .populate('user', 'fullName email phone')
+            .populate('items.product', 'name')
+            .populate('items.reviewId', 'rating')
+            .sort(sort as string)
+            .skip(skip)
+            .limit(Number(limit));
+
+        const total = await Order.countDocuments(filter);
+
+        res.status(200).json({
+            success: true,
+            message: 'Orders retrieved successfully',
+            data: orders,
+            pagination: {
+                page: Number(page),
+                limit: Number(limit),
+                total,
+                pages: Math.ceil(total / Number(limit)),
+            },
+        });
+    } catch (error: any) {
+        console.error('Get all orders error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+        });
+    }
+};
+
+// Update order status (ADMIN ONLY)
+export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { status, paymentStatus, trackingNumber, otp } = req.body;
+
+        // Populate user and include deliveryOtp (which is usually hidden)
+        const order = await Order.findById(id).populate('user').select('+deliveryOtp');
+
+        if (!order) {
+            res.status(404).json({
+                success: false,
+                message: 'Order not found',
+            });
+            return;
+        }
+
+        // OTP Verification for Marking as Delivered (Online payments only)
+        if (status === 'delivered' && order.paymentMethod === 'online') {
+            if (!otp) {
+                res.status(400).json({
+                    success: false,
+                    message: 'Delivery OTP is required for prepaid orders'
+                });
+                return;
+            }
+
+            if (otp !== order.deliveryOtp) {
+                res.status(400).json({
+                    success: false,
+                    message: 'Invalid Delivery OTP'
+                });
+                return;
+            }
+            // OTP is valid
+        }
+
+        // OTP Generation for Out for Delivery (Online payments only)
+        let generatedOtp = null;
+        if (status === 'out_for_delivery' && order.paymentMethod === 'online') {
+            const { randomBytes } = await import('crypto');
+            generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+            // Allow manual update via orderStateManager, but we also need to save OTA.
+            // Since orderStateManager might fetch a fresh copy, we should pass this somehow or update before.
+            // Let's rely on saving it to the order document which orderStateManager will re-fetch or use.
+
+            // Actually, best to update the order object directly if possible, but orderStateManager calls updateStatus.
+            // Let's modify order document AND pass it? Or just save OTP first.
+            order.deliveryOtp = generatedOtp;
+            await order.save();
+        }
+
+        // Use centralized order manager
+        const updatedOrder = await orderStateManager.updateStatus(id, status, {
+            trackingNumber: trackingNumber,
+            forceUpdate: true
+        });
+
+        // Handle paymentStatus separate if explicitly set (overriding auto-logic)
+        if (paymentStatus && paymentStatus !== updatedOrder.paymentStatus) {
+            updatedOrder.paymentStatus = paymentStatus;
+            await updatedOrder.save();
+        }
+
+        // Send email notification based on status
+        const user = order.user as any;
+        if (user && user.email) {
+            try {
+                const { sendEmailNotification } = await import('../services/notificationService');
+
+                // Populate order items for email
+                const populatedOrder = await Order.findById(id).populate('items.product');
+
+                const emailData = {
+                    email: user.email,
+                    fullName: user.fullName,
+                    order: {
+                        orderId: order._id.toString(),
+                        orderNumber: `#${order._id.toString().slice(-6).toUpperCase()}`,
+                        date: order.createdAt.toISOString(),
+                        items: (populatedOrder?.items || []).map((item: any) => ({
+                            name: item.product?.name || 'Product',
+                            quantity: item.quantity,
+                            price: item.price,
+                            image: item.product?.images?.[0] || ''
+                        })),
+                        subtotal: order.totalAmount,
+                        shipping: 0,
+                        tax: 0,
+                        total: order.totalAmount,
+                        shippingAddress: order.shippingAddress,
+                        trackingNumber: updatedOrder.trackingNumber
+                    },
+                    otp: generatedOtp || undefined
+                };
+
+                // Send appropriate email based on status
+                console.log(`📧 Attempting to send ${status} email to ${user.email}`);
+
+                if (status === 'confirmed' || status === 'pending') {
+                    await sendEmailNotification({ ...emailData, type: 'order_placed' });
+                    console.log('✅ Order placed email sent');
+                } else if (status === 'shipped') {
+                    await sendEmailNotification({ ...emailData, type: 'order_shipped' });
+                } else if (status === 'out_for_delivery') {
+                    await sendEmailNotification({ ...emailData, type: 'out_for_delivery', otp: generatedOtp! });
+                    console.log(`✅ Out for delivery email sent (OTP: ${generatedOtp})`);
+                } else if (status === 'delivered') {
+                    await sendEmailNotification({ ...emailData, type: 'order_delivered' });
+                    console.log('✅ Order delivered email sent');
+                } else if (status === 'cancelled') {
+                    await sendEmailNotification({ ...emailData, type: 'order_cancelled' });
+                    console.log('✅ Order cancelled email sent');
+                }
+            } catch (emailError) {
+                console.error('❌ Failed to send order status email:', emailError);
+                console.error('Email data:', { status, userEmail: user.email, orderId: order._id });
+                // Don't fail the order update if email fails
+            }
+        } else {
+            console.log('⚠️ No user email found for order notification');
+        }
+
+        // Send WhatsApp notification based on status
+        if (user && user.phone) {
+            try {
+                const { sendWhatsAppNotification } = await import('../services/whatsappNotificationService');
+                const orderNumber = `#${order._id.toString().slice(-6).toUpperCase()}`;
+
+                let notificationType = '';
+                let notificationData: any = {
+                    userPhone: user.phone,
+                    fullName: user.fullName,
+                    order: {
+                        orderNumber: orderNumber,
+                        trackingNumber: updatedOrder.trackingNumber
+                    }
+                };
+
+                if (status === 'shipped') {
+                    notificationType = 'order_shipped';
+                } else if (status === 'out_for_delivery') {
+                    notificationType = 'out_for_delivery';
+                    // Include OTP if it was generated
+                    if (generatedOtp) {
+                        notificationData.otp = generatedOtp;
+                    }
+                } else if (status === 'delivered') {
+                    notificationType = 'order_delivered';
+                } else if (status === 'cancelled') {
+                    notificationType = 'order_cancelled';
+                }
+
+                if (notificationType) {
+                    await sendWhatsAppNotification({
+                        type: notificationType,
+                        ...notificationData
+                    });
+                }
+            } catch (waError) {
+                console.error('❌ Failed to send WhatsApp notification:', waError);
+            }
+        }
+
+        // Create admin notification for status changes
+        try {
+            const orderNumber = `#${order._id.toString().slice(-6).toUpperCase()}`;
+            const userName = (order.user as any)?.fullName || 'User';
+
+            let notificationData = null;
+
+            if (status === 'shipped') {
+                notificationData = {
+                    type: 'ORDER_SHIPPED',
+                    title: 'Order Shipped',
+                    message: `Order ${orderNumber} has been shipped to ${userName}`,
+                    metadata: { orderId: order._id, userId: order.user }
+                };
+            } else if (status === 'delivered') {
+                notificationData = {
+                    type: 'ORDER_DELIVERED',
+                    title: 'Order Delivered',
+                    message: `Order ${orderNumber} was delivered to ${userName}`,
+                    metadata: { orderId: order._id, userId: order.user }
+                };
+            } else if (status === 'cancelled') {
+                notificationData = {
+                    type: 'ORDER_CANCELLED',
+                    title: 'Order Cancelled',
+                    message: `Order ${orderNumber} was cancelled (Admin action)`,
+                    metadata: { orderId: order._id, userId: order.user }
+                };
+            }
+
+            if (notificationData) {
+                await Notification.create({
+                    user: null,
+                    ...notificationData,
+                    isAdminNotification: true
+                });
+                console.log(`✅ Admin notification created for ${status} status`);
+            }
+        } catch (notifError) {
+            console.error('❌ Failed to create admin notification:', notifError);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Order updated successfully',
+            data: updatedOrder,
+        });
+    } catch (error: any) {
+        console.error('Update order status error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+        });
+    }
+};
+
+// Cancel order (AUTHENTICATED - user can cancel their own pending/processing/shipped orders)
+export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const userId = req.user!._id;
+
+        const order = await Order.findById(id).populate('user');
+
+        if (!order) {
+            res.status(404).json({
+                success: false,
+                message: 'Order not found',
+            });
+            return;
+        }
+
+        // Check if order belongs to user
+        if ((order.user as any)._id.toString() !== userId.toString()) {
+            res.status(403).json({
+                success: false,
+                message: 'Access denied',
+            });
+            return;
+        }
+
+        // Only pending, processing, and shipped orders can be cancelled by users
+        if (!['pending', 'processing', 'shipped'].includes(order.status)) {
+            res.status(400).json({
+                success: false,
+                message: 'Only pending, processing, or shipped orders can be cancelled',
+            });
+            return;
+        }
+
+        // Restore product stock
+        for (const item of order.items) {
+            const product = await Product.findById(item.product);
+            if (product) {
+                product.stock += item.quantity;
+                await product.save();
+            }
+        }
+
+        // Cancel in Shiprocket if it exists
+        if (order.shiprocketOrderId) {
+            try {
+                const { getShiprocketService } = await import('../services/shiprocketService');
+                const shiprocket = getShiprocketService();
+                await shiprocket.cancelShipment([order.shiprocketOrderId]);
+                console.log(`✅ [ORDER] Cancelled Shiprocket order: ${order.shiprocketOrderId}`);
+            } catch (srError: any) {
+                console.error(`⚠️ [ORDER] Failed to cancel Shiprocket order ${order.shiprocketOrderId}:`, srError.message);
+                // Proceed with local cancellation despite Shiprocket error
+            }
+        }
+
+        // Use centralized order manager (handles notifications and broadcast)
+        const updatedOrder = await orderStateManager.updateStatus(id, 'cancelled');
+
+        // Send cancellation email
+        try {
+            console.log('📧 Sending user cancellation email...');
+            const { sendEmailNotification } = await import('../services/notificationService');
+            const user = order.user as any;
+
+            if (user && user.email) {
+                const populatedOrder = await Order.findById(id).populate('items.product');
+
+                await sendEmailNotification({
+                    type: 'order_cancelled',
+                    email: user.email,
+                    fullName: user.fullName,
+                    order: {
+                        orderId: order._id.toString(),
+                        orderNumber: `#${order._id.toString().slice(-6).toUpperCase()}`,
+                        date: order.createdAt.toISOString(),
+                        items: (populatedOrder?.items || []).map((item: any) => ({
+                            name: item.product?.name || 'Product',
+                            quantity: item.quantity,
+                            price: item.price,
+                            image: item.product?.images?.[0] || ''
+                        })),
+                        subtotal: order.totalAmount,
+                        shipping: 0,
+                        tax: 0,
+                        total: order.totalAmount,
+                        shippingAddress: order.shippingAddress
+                    }
+                });
+                console.log('✅ Order cancellation email sent to user');
+            }
+        } catch (emailError) {
+            console.error('❌ Failed to send cancellation email:', emailError);
+        }
+
+        // Send WhatsApp cancellation notification
+        try {
+            const user = order.user as any;
+            if (user && user.phone) {
+                const { sendWhatsAppNotification } = await import('../services/whatsappNotificationService');
+                await sendWhatsAppNotification({
+                    type: 'order_cancelled',
+                    userPhone: user.phone,
+                    fullName: user.fullName,
+                    order: {
+                        orderNumber: `#${order._id.toString().slice(-6).toUpperCase()}`
+                    }
+                });
+                console.log('✅ WhatsApp cancellation notification sent');
+            }
+        } catch (waError) {
+            console.error('❌ Failed to send WhatsApp cancellation notification:', waError);
+        }
+
+        // Create admin notification
+        try {
+            await Notification.create({
+                user: null, // Admin notification
+                type: 'ORDER_CANCELLED_BY_USER',
+                title: 'Order Cancelled by User',
+                message: `Order #${order._id.toString().slice(-6).toUpperCase()} was cancelled by ${(order.user as any).fullName}`,
+                metadata: { orderId: order._id, userId: userId },
+                isAdminNotification: true
+            });
+            console.log('✅ Admin notification created for order cancellation');
+        } catch (notifError) {
+            console.error('❌ Failed to create admin notification:', notifError);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Order cancelled successfully',
+            data: updatedOrder,
+        });
+    } catch (error: any) {
+        console.error('Cancel order error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+        });
+    }
+};

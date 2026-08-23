@@ -1,0 +1,19 @@
+
+```json
+[
+    {
+        "name": "Product 1",
+        "description": "This is product 1",
+        "price": 19.99,
+        "category": "Category 1",
+        "stock": 100
+    },
+    {
+        "name": "Product 2",
+        "description": "This is product 2",
+        "price": 29.99,
+        "category": "Category 2",
+        "stock": 50
+    }
+]
+```

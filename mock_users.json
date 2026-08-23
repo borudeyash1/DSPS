@@ -1,0 +1,17 @@
+
+```json
+[
+    {
+        "username": "user1",
+        "email": "user1@example.com",
+        "password": "password1",
+        "role": "admin"
+    },
+    {
+        "username": "user2",
+        "email": "user2@example.com",
+        "password": "password2",
+        "role": "user"
+    }
+]
+```

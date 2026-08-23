@@ -1,0 +1,691 @@
+import { Request, Response } from 'express';
+import { AuthenticatedRequest } from '../types';
+import Order from '../models/Order';
+import mongoose from 'mongoose';
+import { orderStateManager } from '../services/orderStateManager';
+
+/**
+ * Delivery Service
+ * Manages delivery operations with Shiprocket integration
+ */
+
+// Generate mock tracking number
+const generateTrackingNumber = (): string => {
+    const prefix = 'BOTAM';
+    const timestamp = Date.now().toString().slice(-8);
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `${prefix}${timestamp}${random}`;
+};
+
+// Generate mock AWB code
+const generateAWBCode = (): string => {
+    const random = Math.floor(Math.random() * 900000000) + 100000000;
+    return `AWB${random}`;
+};
+
+// Mock courier companies
+const mockCouriers = [
+    'BlueDart Express',
+    'Delhivery',
+    'DTDC',
+    'Ecom Express',
+    'FedEx India',
+    'India Post'
+];
+
+/**
+ * Initiate delivery for an order
+ */
+export const initiateMockDelivery = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const { orderId } = req.body;
+
+        const order = await Order.findById(orderId);
+
+        if (!order) {
+            res.status(404).json({
+                success: false,
+                message: 'Order not found'
+            });
+            return;
+        }
+
+        // Check if order is eligible for delivery
+        if (order.status === 'cancelled') {
+            res.status(400).json({
+                success: false,
+                message: 'Cannot initiate delivery for cancelled order'
+            });
+            return;
+        }
+
+        if (order.status === 'delivered') {
+            res.status(400).json({
+                success: false,
+                message: 'Order already delivered'
+            });
+            return;
+        }
+
+        // Generate mock delivery details
+        const trackingNumber = generateTrackingNumber();
+        const awbCode = generateAWBCode();
+        const courierName = mockCouriers[Math.floor(Math.random() * mockCouriers.length)];
+
+        // Update order using centralized manager
+        await orderStateManager.updateStatus(order._id, 'processing', {
+            trackingNumber,
+            awbCode,
+            courierName
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Delivery initiated successfully',
+            data: {
+                orderId: order._id,
+                trackingNumber,
+                awbCode,
+                courierName,
+                status: 'processing',
+                estimatedDelivery: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) // 3 days from now
+            }
+        });
+    } catch (error: any) {
+        console.error('Initiate delivery error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to initiate delivery'
+        });
+    }
+};
+
+/**
+ * Generate and send OTP for delivery confirmation (On-demand)
+ */
+export const generateDeliveryOtp = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const { orderId } = req.body;
+        console.log(`Generating Delivery OTP for order: ${orderId}`);
+
+        const order = await Order.findById(orderId).populate('user');
+
+        if (!order) {
+            res.status(404).json({
+                success: false,
+                message: 'Order not found'
+            });
+            return;
+        }
+
+        // Generate OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Save OTP (explicitly using findByIdAndUpdate to ensure it saves even if select: false)
+        await Order.findByIdAndUpdate(order._id, { deliveryOtp: otp });
+        console.log(`✅ Manual OTP generated: ${otp} for order ${order._id}`);
+
+        // Trigger Email Notification for OTP
+        // User requested 'delivery_otp' type
+        try {
+            const { sendEmailNotification } = await import('../services/notificationService');
+
+            // Populate items for email context if needed
+            const populatedOrder = await Order.findById(order._id).populate('items.product');
+
+            if (populatedOrder && order.user) {
+                const user = order.user as any;
+                const emailData = {
+                    email: user.email,
+                    fullName: user.fullName,
+                    order: {
+                        orderId: order._id.toString(),
+                        orderNumber: `#${order._id.toString().slice(-6).toUpperCase()}`,
+                        date: order.createdAt.toISOString(),
+                        items: (populatedOrder.items || []).map((item: any) => ({
+                            name: item.name || item.product?.name || 'Product',
+                            quantity: item.quantity,
+                            price: item.price,
+                            image: item.image || item.product?.images?.[0]
+                        })),
+                        subtotal: order.totalAmount, // Using total as subtotal for now
+                        shipping: 0,
+                        tax: 0,
+                        total: order.totalAmount,
+                        shippingAddress: order.shippingAddress || {
+                            street: '',
+                            city: '',
+                            state: '',
+                            pincode: '',
+                            country: ''
+                        }
+                    }
+                };
+
+                // Send email with type 'delivery_otp' as requested
+                await sendEmailNotification({
+                    ...emailData,
+                    type: 'delivery_otp' as any,
+                    otp: otp
+                });
+                console.log('✅ Delivery OTP email sent to n8n');
+            }
+        } catch (emailError) {
+            console.error('Failed to send OTP email:', emailError);
+            // Verify if we should fail or continue? 
+            // User wants to confirm sending, so if it fails, we should probably warn.
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'OTP sent to customer'
+        });
+
+    } catch (error: any) {
+        console.error('Generate delivery OTP error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to generate OTP'
+        });
+    }
+};
+
+/**
+ * Update order status (simulate delivery progress)
+ */
+export const updateDeliveryStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const { orderId, status } = req.body;
+        console.log('Mock Update Status Request:', { orderId, status, body: req.body });
+
+        const validStatuses = ['processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'];
+        if (!validStatuses.includes(status)) {
+            res.status(400).json({
+                success: false,
+                message: 'Invalid status. Must be one of: ' + validStatuses.join(', ')
+            });
+            return;
+        }
+
+        // Fetch order with deliveryOtp explicitly included
+        const order = await Order.findById(orderId).select('+deliveryOtp');
+
+        if (!order) {
+            res.status(404).json({
+                success: false,
+                message: 'Order not found'
+            });
+            return;
+        }
+
+        // Validate OTP for delivery if order is prepaid/online
+        const pMethod = order.paymentMethod ? order.paymentMethod.toLowerCase() : '';
+        if (status === 'delivered' && (pMethod === 'online' || pMethod === 'prepaid')) {
+            const inputOtp = req.body.otp ? req.body.otp.toString().trim() : '';
+            const storedOtp = order.deliveryOtp ? order.deliveryOtp.toString().trim() : '';
+
+            console.log(`Debug Delivery Validation - Order: ${orderId}, Method: ${order.paymentMethod}, Input: '${inputOtp}', Stored: '${storedOtp}'`);
+
+            if (!storedOtp) {
+                console.error(`Security Alert: Order ${orderId} attempting delivery without stored OTP.`);
+                res.status(500).json({
+                    success: false,
+                    message: 'System Error: No OTP found for this order. Please move status back to "Out for Delivery" to regenerate.'
+                });
+                return;
+            }
+
+            if (!inputOtp) {
+                res.status(400).json({
+                    success: false,
+                    message: 'OTP is required for delivery verification'
+                });
+                return;
+            }
+
+            if (inputOtp !== storedOtp) {
+                res.status(400).json({
+                    success: false,
+                    message: 'Invalid OTP. Please check the code sent to the customer.'
+                });
+                return;
+            }
+        }
+
+        await orderStateManager.updateStatus(order._id, status);
+
+        // Refresh order to get updated payment status
+        const updatedOrder = await Order.findById(orderId);
+        if (!updatedOrder) return; // Should not happen
+
+        res.status(200).json({
+            success: true,
+            message: `Order status updated to ${status}`,
+            data: {
+                orderId: updatedOrder._id,
+                status: updatedOrder.status,
+                paymentStatus: updatedOrder.paymentStatus
+            }
+        });
+    } catch (error: any) {
+        console.error('Update delivery status error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to update status'
+        });
+    }
+};
+
+/**
+ * Get tracking information
+ */
+export const getMockTracking = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { trackingNumber } = req.params;
+
+        // Find order by tracking number
+        const order = await Order.findOne({ trackingNumber }).populate('user', 'fullName email phone');
+
+        if (!order) {
+            res.status(404).json({
+                success: false,
+                message: 'Tracking number not found'
+            });
+            return;
+        }
+
+        // Generate mock tracking events based on order status
+        const trackingEvents = generateMockTrackingEvents(order);
+
+        res.status(200).json({
+            success: true,
+            message: 'Tracking information retrieved',
+            data: {
+                trackingNumber: order.trackingNumber,
+                awbCode: (order as any).awbCode,
+                courierName: (order as any).courierName,
+                currentStatus: order.status,
+                estimatedDelivery: new Date(order.createdAt.getTime() + 3 * 24 * 60 * 60 * 1000),
+                shippingAddress: order.shippingAddress,
+                events: trackingEvents
+            }
+        });
+    } catch (error: any) {
+        console.error('Get tracking error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to get tracking info'
+        });
+    }
+};
+
+/**
+ * Generate tracking events based on order status
+ */
+function generateMockTrackingEvents(order: any) {
+    const events = [];
+    const orderDate = new Date(order.createdAt);
+
+    // Order placed
+    events.push({
+        status: 'Order Placed',
+        description: 'Your order has been placed successfully',
+        location: 'Botam Apparels Warehouse',
+        timestamp: orderDate,
+        icon: '📦'
+    });
+
+    if (order.status === 'processing' || order.status === 'shipped' || order.status === 'delivered') {
+        // Order confirmed
+        events.push({
+            status: 'Order Confirmed',
+            description: 'Your order has been confirmed and is being prepared',
+            location: 'Botam Apparels Warehouse',
+            timestamp: new Date(orderDate.getTime() + 2 * 60 * 60 * 1000), // 2 hours later
+            icon: '✅'
+        });
+
+        // Picked up
+        events.push({
+            status: 'Picked Up',
+            description: `Package picked up by ${(order as any).courierName || 'courier partner'}`,
+            location: order.shippingAddress.city,
+            timestamp: new Date(orderDate.getTime() + 24 * 60 * 60 * 1000), // 1 day later
+            icon: '🚚'
+        });
+    }
+
+    if (order.status === 'shipped' || order.status === 'delivered') {
+        // In transit
+        events.push({
+            status: 'In Transit',
+            description: 'Package is on the way to your location',
+            location: `${order.shippingAddress.state} Sorting Hub`,
+            timestamp: new Date(orderDate.getTime() + 2 * 24 * 60 * 60 * 1000), // 2 days later
+            icon: '🛣️'
+        });
+
+        // Out for delivery
+        events.push({
+            status: 'Out for Delivery',
+            description: 'Package is out for delivery',
+            location: order.shippingAddress.city,
+            timestamp: new Date(orderDate.getTime() + 3 * 24 * 60 * 60 * 1000), // 3 days later
+            icon: '🏃'
+        });
+    }
+
+    if (order.status === 'delivered') {
+        // Delivered
+        events.push({
+            status: 'Delivered',
+            description: 'Package delivered successfully',
+            location: order.shippingAddress.street,
+            timestamp: new Date(orderDate.getTime() + 3 * 24 * 60 * 60 * 1000 + 6 * 60 * 60 * 1000), // 3.25 days later
+            icon: '✨'
+        });
+    }
+
+    if (order.status === 'cancelled') {
+        events.push({
+            status: 'Cancelled',
+            description: 'Order has been cancelled',
+            location: 'Botam Apparels',
+            timestamp: new Date(),
+            icon: '❌'
+        });
+    }
+
+    return events.reverse(); // Most recent first
+}
+
+/**
+ * Auto-progress order status (for demo purposes)
+ */
+export const autoProgressOrder = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const { orderId } = req.body;
+
+        const order = await Order.findById(orderId);
+
+        if (!order) {
+            res.status(404).json({
+                success: false,
+                message: 'Order not found'
+            });
+            return;
+        }
+
+        // Progress through statuses
+        const statusFlow = ['pending', 'processing', 'shipped', 'delivered'];
+        const currentIndex = statusFlow.indexOf(order.status);
+
+        if (currentIndex === -1 || currentIndex === statusFlow.length - 1) {
+            res.status(400).json({
+                success: false,
+                message: 'Cannot auto-progress this order'
+            });
+            return;
+        }
+
+        const nextStatus = statusFlow[currentIndex + 1];
+        await orderStateManager.updateStatus(order._id, nextStatus as any);
+
+        // Refresh order
+        const updatedOrder = await Order.findById(orderId);
+        if (!updatedOrder) return;
+
+        res.status(200).json({
+            success: true,
+            message: `Order progressed to ${nextStatus}`,
+            data: {
+                orderId: order._id,
+                previousStatus: statusFlow[currentIndex],
+                currentStatus: nextStatus,
+                canProgressFurther: currentIndex + 1 < statusFlow.length - 1
+            }
+        });
+    } catch (error: any) {
+        console.error('Auto-progress order error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to progress order'
+        });
+    }
+};
+
+/**
+ * Bulk update orders for testing
+ */
+export const bulkUpdateOrderStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const { orderIds, status } = req.body;
+
+        if (!Array.isArray(orderIds) || orderIds.length === 0) {
+            res.status(400).json({
+                success: false,
+                message: 'Order IDs array is required'
+            });
+            return;
+        }
+
+        const validStatuses = ['processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'];
+        if (!validStatuses.includes(status)) {
+            res.status(400).json({
+                success: false,
+                message: 'Invalid status'
+            });
+            return;
+        }
+
+        // Use loop to ensure all side effects (notifications) trigger
+        let updateCount = 0;
+        for (const id of orderIds) {
+            try {
+                await orderStateManager.updateStatus(id, status);
+                updateCount++;
+            } catch (err) {
+                console.warn(`Failed to update order ${id} in bulk op`, err);
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Updated ${updateCount} orders`,
+            data: {
+                updatedCount: updateCount,
+                status
+            }
+        });
+    } catch (error: any) {
+        console.error('Bulk update error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to update orders'
+        });
+    }
+};
+
+/**
+ * Get all orders for delivery dashboard
+ * Syncs with Shiprocket API to get real-time status and delivery dates
+ */
+export const getAllMockOrders = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+        const { page = 1, limit = 50, search, status } = req.query;
+        let query: any = {};
+
+        if (status && status !== 'all') {
+            query.status = status;
+        }
+
+        if (search) {
+            const searchStr = search as string;
+            const searchRegex = new RegExp(searchStr, 'i');
+            const criteria = [];
+
+            // 1. Search by Order ID
+            if (mongoose.Types.ObjectId.isValid(searchStr)) {
+                criteria.push({ _id: searchStr });
+            }
+
+            // 2. Search by Tracking Number or AWB
+            criteria.push({ trackingNumber: { $regex: searchRegex } });
+            criteria.push({ awbCode: { $regex: searchRegex } });
+
+            // 3. Search by User
+            const matchingUsers = await mongoose.model('User').find({
+                $or: [
+                    { fullName: { $regex: searchRegex } },
+                    { email: { $regex: searchRegex } }
+                ]
+            }).select('_id');
+
+            if (matchingUsers.length > 0) {
+    // @ts-ignore
+                criteria.push({ user: { $in: matchingUsers.map(u => u._id) } });
+            }
+
+            if (criteria.length > 0) {
+                query.$or = criteria;
+            } else {
+                res.status(200).json({ success: true, data: [] });
+                return;
+            }
+        }
+
+        const orders = await Order.find(query)
+            .sort({ createdAt: -1 })
+            .limit(Number(limit))
+            .populate('user', 'fullName email')
+            .lean();
+
+        // Sync with Shiprocket API for orders that have Shiprocket integration
+        const transformedOrders = await Promise.all(orders.map(async (order) => {
+            let updatedOrder = { ...order };
+
+            // If order has Shiprocket AWB, fetch latest tracking info
+            if ((order as any).awbCode) {
+                try {
+                    const { getShiprocketService } = await import('../services/shiprocketService');
+                    const shiprocket = getShiprocketService();
+                    
+                    const trackingData = await shiprocket.trackShipment((order as any).awbCode);
+                    
+                    if (trackingData?.tracking_data) {
+                        const tracking = trackingData.tracking_data;
+                        
+                        // Update estimated delivery date from Shiprocket
+                        if (tracking.etd) {
+                            updatedOrder.estimatedDeliveryDate = new Date(tracking.etd);
+                        }
+                        
+                        // Update Shiprocket status
+                        if (tracking.shipment_status_id || tracking.current_status) {
+                            updatedOrder.shiprocketStatus = tracking.current_status || tracking.shipment_status;
+                        }
+                        
+                        // Update courier tracking URL
+                        if (tracking.track_url) {
+                            updatedOrder.courierTrackingUrl = tracking.track_url;
+                        }
+                        
+                        // Enhanced status mapping from Shiprocket to local status
+                        const statusMap: { [key: string]: string } = {
+                            // New/Pending statuses
+                            'NEW': 'pending',
+                            'PENDING': 'pending',
+                            
+                            // Processing statuses
+                            'PICKUP_SCHEDULED': 'processing',
+                            'PICKUP SCHEDULED': 'processing',
+                            'PICKED_UP': 'processing',
+                            'PICKED UP': 'processing',
+                            'READY TO SHIP': 'processing',
+                            'AWB ASSIGNED': 'processing',
+                            
+                            // Shipped/In Transit statuses
+                            'IN_TRANSIT': 'shipped',
+                            'IN TRANSIT': 'shipped',
+                            'SHIPPED': 'shipped',
+                            'IN TRANSIT - DELAYED': 'shipped',
+                            
+                            // Out for Delivery
+                            'OUT_FOR_DELIVERY': 'out_for_delivery',
+                            'OUT FOR DELIVERY': 'out_for_delivery',
+                            'OUT FOR DELIVERY - DELAYED': 'out_for_delivery',
+                            
+                            // Delivered
+                            'DELIVERED': 'delivered',
+                            'DELIVERED - DELAYED': 'delivered',
+                            
+                            // Cancelled/RTO
+                            'CANCELLED': 'cancelled',
+                            'CANCELED': 'cancelled',
+                            'RTO': 'cancelled',
+                            'RTO INITIATED': 'cancelled',
+                            'RTO DELIVERED': 'cancelled',
+                            'RTO IN TRANSIT': 'cancelled',
+                            'LOST': 'cancelled',
+                            'DAMAGED': 'cancelled'
+                        };
+                        
+                        const currentStatus = tracking.current_status || tracking.shipment_status;
+                        if (currentStatus && statusMap[currentStatus]) {
+                            // Update local database if status changed
+                            const mappedStatus = statusMap[currentStatus] as 'pending' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled';
+                            if (mappedStatus !== order.status) {
+                                console.log(`📦 [SYNC] Updating order ${order._id} status from ${order.status} to ${mappedStatus} (Shiprocket: ${currentStatus})`);
+                                
+                                // Update database with all tracking info
+                                await Order.findByIdAndUpdate(order._id, {
+                                    status: mappedStatus,
+                                    shiprocketStatus: currentStatus,
+                                    estimatedDeliveryDate: tracking.etd ? new Date(tracking.etd) : undefined,
+                                    courierTrackingUrl: tracking.track_url,
+                                    // Update actual delivery date if delivered
+                                    ...(mappedStatus === 'delivered' && tracking.delivered_date ? {
+                                        actualDeliveryDate: new Date(tracking.delivered_date)
+                                    } : {})
+                                });
+                                updatedOrder.status = mappedStatus;
+                            } else {
+                                // Even if status hasn't changed, update other tracking info
+                                await Order.findByIdAndUpdate(order._id, {
+                                    shiprocketStatus: currentStatus,
+                                    estimatedDeliveryDate: tracking.etd ? new Date(tracking.etd) : undefined,
+                                    courierTrackingUrl: tracking.track_url
+                                });
+                            }
+                        }
+                    }
+                } catch (trackingError: any) {
+                    console.error(`⚠️ [SYNC] Failed to fetch tracking for AWB ${(order as any).awbCode}:`, trackingError.message);
+                    // Continue with existing data if tracking fails
+                }
+            }
+
+            // Add mock data for orders without tracking
+            if (!updatedOrder.awbCode && order.status !== 'pending' && order.status !== 'cancelled') {
+                updatedOrder.awbCode = generateAWBCode();
+            }
+            
+            if (!updatedOrder.courierName) {
+                updatedOrder.courierName = order.status === 'pending' ? 'Pending Assignment' : 'Mock Courier';
+            }
+
+            return updatedOrder;
+        }));
+
+        res.status(200).json({
+            success: true,
+            data: transformedOrders
+        });
+    } catch (error: any) {
+        console.error('Get all orders error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch orders'
+        });
+    }
+};
